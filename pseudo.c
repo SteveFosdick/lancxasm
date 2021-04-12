@@ -73,41 +73,92 @@ static void pseudo_cstr(struct inctx *inp, struct symbol *sym)
 	objbytes[0] = objsize - 1;
 }
 
-static void pseudo_dfb(struct inctx *inp, struct symbol *sym)
+static size_t check_grow_buffer(struct inctx *inp, size_t size)
+{
+	size_t reqd = objsize + size;
+	if (reqd > objalloc) {
+		uint8_t *newbuf = realloc(objbytes, reqd);
+		if (newbuf) {
+			objbytes = newbuf;
+			objalloc = reqd;
+		}
+		else {
+			asm_error(inp, "out of memory for code buffer");
+			return objalloc - objsize;
+		}
+	}
+	return size;
+}		
+
+static void plant_bytes(struct inctx *inp, size_t count, uint16_t byte)
+{
+	size_t bytes = check_grow_buffer(inp, count);
+	while (bytes--)
+		objbytes[objsize++] = byte;
+}
+
+static void plant_words(struct inctx *inp, size_t count, uint16_t word)
+{
+	size_t bytes = check_grow_buffer(inp, count << 1) & ~1;
+	while (bytes) {
+		objbytes[objsize++] = word;
+		objbytes[objsize++] = word >> 8;
+		bytes -= 2;
+	}
+}
+
+static void plant_dbytes(struct inctx *inp, size_t count, uint16_t word)
+{
+	size_t bytes = check_grow_buffer(inp, count << 1) & ~1;
+	while (bytes) {
+		objbytes[objsize++] = word >> 8;
+		objbytes[objsize++] = word;
+		bytes -= 2;
+	}
+}
+
+static void plant_data(struct inctx *inp, const char *desc, void (*planter)(struct inctx *inp, size_t count, uint16_t value))
 {
 	int ch;
 	do {
-		objbytes[objsize++] = expression(inp);
+		ch = non_space(inp);
+		if (ch == '[') {
+			++inp->lineptr;
+			size_t count = expression(inp);
+			ch = non_space(inp);
+			if (ch == ']') {
+				++inp->lineptr;
+				planter(inp, count, expression(inp));
+			}
+			else
+				asm_error(inp, "missing ]");
+		}
+		else
+			planter(inp, 1, expression(inp));
 		ch = *inp->lineptr++;
 	} while (ch == ',');
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
-		asm_error(inp, "bad byte expression");
+		asm_error(inp, "bad %s expression", desc);
+}	
+
+static void pseudo_dfb(struct inctx *inp, struct symbol *sym)
+{
+	plant_data(inp, "byte", plant_bytes);
 }
 
 static void pseudo_dfw(struct inctx *inp, struct symbol *sym)
 {
-	int ch;
-	do {
-		uint16_t word = expression(inp);
-		objbytes[objsize++] = word & 0xff;
-		objbytes[objsize++] = word >> 8;
-		ch = *inp->lineptr++;
-	} while (ch == ',');
-	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
-		asm_error(inp, "bad word expression");
+	plant_data(inp, "word", plant_words);
 }
 
 static void pseudo_dfdb(struct inctx *inp, struct symbol *sym)
 {
-	int ch;
-	do {
-		uint16_t word = expression(inp);
-		objbytes[objsize++] = word >> 8;
-		objbytes[objsize++] = word & 0xff;
-		ch = *inp->lineptr++;
-	} while (ch == ',');
-	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
-		asm_error(inp, "bad double-byte expression");
+	plant_data(inp, "double-byte", plant_dbytes);
+}
+
+static void pseudo_ds(struct inctx *inp, struct symbol *sym)
+{
+	plant_bytes(inp, expression(inp), 0);
 }
 
 static void pseudo_clst(struct inctx *inp, struct symbol *sym)
@@ -191,17 +242,21 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 		fseek(fp, 0, SEEK_END);
 		size_t size = ftell(fp);
 		rewind(fp);
-		codefile = malloc(size);
-		if (codefile) {
-			if (fread(codefile, size, 1, fp) == 1) {
-				objsize = size;
-				memcpy(objbytes, codefile, 3);
+		if (size > objalloc) {
+			uint8_t *newbuf = realloc(objbytes, size);
+			if (newbuf) {
+				objbytes = newbuf;
+				objalloc = size;
 			}
-			else
-				asm_error(inp, "read error on code file %s: %s", filename, strerror(errno));
+			else {
+				asm_error(inp, "no enough memory to read all of code file %s", filename);
+				size = objalloc;
+			}
 		}
+		if (fread(objbytes, size, 1, fp) == 1)
+			objsize = size;
 		else
-			asm_error(inp, "not enough memory for code file %s", filename);
+			asm_error(inp, "read error on code file %s: %s", filename, strerror(errno));
 		fclose(fp);
 	}
 }
@@ -223,6 +278,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "DFB",     pseudo_dfb     },
 	{ "DFW",     pseudo_dfw     },
 	{ "DSECT",   pseudo_dsect   },
+	{ "DS",      pseudo_ds      },
 	{ "DW",      pseudo_dfw     },
 	{ "DFDB",    pseudo_dfdb    },
 	{ "EQU",     pseudo_equ     },

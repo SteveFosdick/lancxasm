@@ -30,10 +30,9 @@ extern unsigned src_list_level;
 extern bool no_cmos;
 extern unsigned passno;
 extern uint16_t org, org_code, org_dsect;
-extern bool in_dsect;
-extern uint8_t objbytes[LINE_MAX];
-extern unsigned objsize;
-extern uint8_t *codefile;
+extern bool in_dsect, in_ds;
+extern uint8_t *objbytes;
+extern unsigned objalloc, objsize;
 
 extern void symbol_ade_mode(void);
 extern struct symbol *symbol_enter(struct inctx *inp);

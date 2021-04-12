@@ -18,9 +18,9 @@ unsigned src_list_level = 0;
 bool no_cmos = false;
 unsigned passno = 0;
 uint16_t org, org_code, org_dsect;
-bool in_dsect;
-uint8_t objbytes[LINE_MAX];
-unsigned objsize = 0;
+bool in_dsect, in_ds;
+uint8_t *objbytes = NULL;
+unsigned objalloc = LINE_MAX, objsize = 0;
 uint8_t *codefile = NULL;
 
 void asm_error(struct inctx *inp, const char *fmt, ...)
@@ -233,30 +233,32 @@ int main(int argc, char **argv)
         }
     }
     if (status == 0) {
-        if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
-            fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
-            status = 2;
-        }
-        else {
-            if (obj_filename && (obj_fp = fopen(obj_filename, "wb")) == NULL) {
-                fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
-                status = 3;
-            }
-            else {
-				asm_pass(argc, argv);
-				if (err_count) {
-                    fprintf(stderr, "lancxasm: %u errors, on pass 1, pass 2 skipped\n", err_count);
-                    status = 4;
-                }
-                else {
-					passno = 1;
+		if ((objbytes = malloc(LINE_MAX))) {
+			if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
+				fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
+				status = 2;
+			}
+			else {
+				if (obj_filename && (obj_fp = fopen(obj_filename, "wb")) == NULL) {
+					fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
+					status = 3;
+				}
+				else {
 					asm_pass(argc, argv);
 					if (err_count) {
-						fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);
-						status = 5;
+						fprintf(stderr, "lancxasm: %u errors, on pass 1, pass 2 skipped\n", err_count);
+						status = 4;
 					}
-					if (list_fp)
-						symbol_print();
+					else {
+						passno = 1;
+						asm_pass(argc, argv);
+						if (err_count) {
+							fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);
+							status = 5;
+						}
+						if (list_fp)
+							symbol_print();
+					}
 				}
                 if (obj_fp)
                     fclose(obj_fp);
@@ -264,6 +266,8 @@ int main(int argc, char **argv)
             if (list_fp)
                 fclose(list_fp);
         }
+        else
+			fputs("lancxasm: no memory for code buffer\n", stderr);
     }
     else
         fputs("Usage: lancxasm [ -a ] [ -c level ] [ -f list-file ] [ -l level ] [ -o obj-file ] [ -r ] [ -s ] <file> [ ... ]\n", stderr);
