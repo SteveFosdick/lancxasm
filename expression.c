@@ -1,4 +1,5 @@
 #include "lancxasm.h"
+#include <stdlib.h>
 
 static int expr_term(struct inctx *inp)
 {
@@ -39,7 +40,7 @@ static int expr_term(struct inctx *inp)
     else if (ch == '$' || ch == '&')
         value = strtoul(inp->lineptr + 1, &inp->lineptr, 16);
     else if (ch >= '0' && ch <= '9')
-        value = strtoul(inp->lineptr + 1, &inp->lineptr, 10);
+        value = strtoul(inp->lineptr, &inp->lineptr, 10);
     else if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'))
 		value = symbol_lookup(inp);
 	else {
