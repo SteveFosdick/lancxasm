@@ -1,5 +1,6 @@
 #include "lancxasm.h"
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <search.h>
 
@@ -58,7 +59,7 @@ struct symbol *symbol_enter(struct inctx *inp)
 				if (!res)
 					asm_error(inp, "out of memory allocating a symbol");
 				else if (*res != sym) {
-					asm_error(inp, "symbol already defined");
+					asm_error(inp, "symbol %s already defined", sym->name);
 					free(sym);
 				}
 				else {
@@ -103,7 +104,7 @@ uint16_t symbol_lookup(struct inctx *inp)
 	}
 	else {
 		if (passno)
-			asm_error(inp, "symbol not found");
+			asm_error(inp, "symbol %s not found", name);
 		return org;
 	}
 }

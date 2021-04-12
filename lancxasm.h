@@ -1,10 +1,10 @@
 #ifndef LANCXASM_INC
 #define LANCXASM_INC
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #define LINE_MAX 132
 
@@ -15,7 +15,6 @@ struct inctx {
 	char *linebuf;
 	char *lineptr;
 	char *lineend;
-	const char *errmsg;
 	char whence;
 };
 
@@ -41,7 +40,7 @@ extern struct symbol *symbol_enter(struct inctx *inp);
 extern uint16_t symbol_lookup(struct inctx *inp);
 extern void symbol_print(void);
 
-extern void asm_error(struct inctx *inp, const char *msg);
+extern void asm_error(struct inctx *inp, const char *fmt, ...);
 extern void asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);
 extern int expression(struct inctx *inp);

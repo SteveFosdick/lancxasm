@@ -1,4 +1,6 @@
 #include "lancxasm.h"
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void pseudo_equ(struct inctx *inp, struct symbol *sym)
@@ -144,7 +146,7 @@ static FILE *parse_open(struct inctx *inp, char *filename, const char *mode)
 {
 	char *ptr = filename;
 	int ch = non_space(inp);
-	while (ch != ' ' && ch != '\t' && ch != 0xdd) {
+	while (ch != '\n' && ch != ' ' && ch != '\t' && ch != 0xdd) {
 		*ptr++ = ch;
 		ch = *++inp->lineptr;
 	}
@@ -163,7 +165,7 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 		asm_file(inp);
 	}
 	else
-		asm_error(inp, "unable to open chained file");
+		asm_error(inp, "unable to open chained file %s: %s", filename, strerror(errno));
 }
 
 static void pseudo_include(struct inctx *inp, struct symbol *sym)
@@ -178,7 +180,7 @@ static void pseudo_include(struct inctx *inp, struct symbol *sym)
 		asm_file(&incfile);
 	}
 	else
-		asm_error(inp, "unable to open chained file");
+		asm_error(inp, "unable to open include file %s: %s", filename, strerror(errno));
 }
 
 static void pseudo_code(struct inctx *inp, struct symbol *sym)
@@ -196,10 +198,10 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 				memcpy(objbytes, codefile, 3);
 			}
 			else
-				asm_error(inp, "read error on code file");
+				asm_error(inp, "read error on code file %s: %s", filename, strerror(errno));
 		}
 		else
-			asm_error(inp, "not enough memory for code file");
+			asm_error(inp, "not enough memory for code file %s", filename);
 		fclose(fp);
 	}
 }

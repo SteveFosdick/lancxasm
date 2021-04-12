@@ -86,9 +86,9 @@ static void m6502_implied(struct inctx *inp, const struct optab_ent *ptr)
 	if (code == 0xffff)
 		code = ptr->acc;
 	if (code == 0xffff)
-		asm_error(inp, "This instruction needs an operand");
+		asm_error(inp, "Operation %s needs an operand", ptr->mnemonic);
 	else if (code & 0x100 && no_cmos)
-		asm_error(inp, "This is a CMOS-only instruction");
+		asm_error(inp, "%s is a CMOS-only instruction", ptr->mnemonic);
 	else {
 		objbytes[0] = code;
 		objsize = 1;
@@ -187,8 +187,10 @@ static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 		uint16_t code = ptr->rel;
 		if (code != 0xffff && !(code & 0x100 && no_cmos)) {
 			int offs = (int)value - (int)(org + 2);
-			if ((offs < -128 || offs > 127) && passno)
-				asm_error(inp, "branch out of range");
+			if (offs < -128)
+				asm_error(inp, "backward branch of %d bytes is out of range by %d bytes", -offs, -offs - 128);
+			else if (offs > 127)
+				asm_error(inp, "forward branch of %d bytes is out of range by %d bytes", offs, offs - 127);
 			objbytes[0] = code;
 			objbytes[1] = offs;
 			objsize = 2;

@@ -1,12 +1,15 @@
+#define _GNU_SOURCE
 #include "lancxasm.h"
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 static bool skip_cond = false;
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
-static unsigned errors;
+static unsigned err_count, err_column;
+static char *err_message = NULL;
 
 FILE *list_fp = NULL;
 FILE *obj_fp = NULL;
@@ -20,13 +23,17 @@ uint8_t objbytes[LINE_MAX];
 unsigned objsize = 0;
 uint8_t *codefile = NULL;
 
-void asm_error(struct inctx *inp, const char *msg)
+void asm_error(struct inctx *inp, const char *fmt, ...)
 {
-	++errors;
-    if (!inp->errmsg)
-		inp->errmsg = msg;
-	int cno = inp->lineptr - inp->linebuf;
-	fprintf(stderr, "%s:%u:%d: %s\n", inp->name, inp->lineno, cno, msg);
+	if (!err_message) {
+		va_list ap;
+		++err_count;
+		err_column = inp->lineptr - inp->linebuf;
+		va_start(ap, fmt);
+		vasprintf(&err_message, fmt, ap);
+		va_end(ap);
+		fprintf(stderr, "%s:%u:%d: %s\n", inp->name, inp->lineno, err_column, err_message);
+	}
 }
 
 int non_space(struct inctx *inp)
@@ -104,10 +111,10 @@ static void list_line(struct inctx *inp)
 		putc(' ', list_fp);
 		fwrite(inp->linebuf, inp->lineend - inp->linebuf + 1, 1, list_fp);
 	}
-	if (inp->errmsg) {
-		int cno = inp->lineptr - inp->linebuf;
-		fprintf(list_fp, "+++ERROR at character %d: %s\n", cno, inp->errmsg);
-		inp->errmsg = NULL;
+	if (err_message) {
+		fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
+		free(err_message);
+		err_message = NULL;
 	}
 	if (codefile) {
 		if (code_list_level >= 2)
@@ -129,7 +136,11 @@ static void asm_line(struct inctx *inp)
 	else if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
 		asm_error(inp, "labels must start with a letter");
 	if (passno && list_fp)
-		list_line(inp);	
+		list_line(inp);
+	else if (err_message) {
+		free(err_message);
+		err_message = NULL;
+	}
 	if (objsize) {
 		org += objsize;
 		if (passno && obj_fp && !in_dsect)
@@ -145,7 +156,6 @@ void asm_file(struct inctx *inp)
 	char linebuf[LINE_MAX+1];
 	bool ign_tail = false;
 	inp->lineno = 0;
-	inp->errmsg = NULL;
 	inp->linebuf = linebuf;
 	while (fgets(linebuf, sizeof(linebuf), inp->fp)) {
 		char *eol = strchr(linebuf, '\n');
@@ -234,15 +244,15 @@ int main(int argc, char **argv)
             }
             else {
 				asm_pass(argc, argv);
-				if (errors) {
-                    fprintf(stderr, "lancxasm: %u errors, on pass 1, pass 2 skipped\n", errors);
+				if (err_count) {
+                    fprintf(stderr, "lancxasm: %u errors, on pass 1, pass 2 skipped\n", err_count);
                     status = 4;
                 }
                 else {
 					passno = 1;
 					asm_pass(argc, argv);
-					if (errors) {
-						fprintf(stderr, "lancxasm: %u errors, on pass 2\n", errors);
+					if (err_count) {
+						fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);
 						status = 5;
 					}
 					if (list_fp)
