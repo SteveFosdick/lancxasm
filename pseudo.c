@@ -5,13 +5,16 @@
 
 static void pseudo_equ(struct inctx *inp, struct symbol *sym)
 {
-	if (sym)
-		sym->value = expression(inp, passno);
+	if (sym) {
+		uint16_t value = expression(inp, passno);
+		sym->value = value;
+		list_value = value;
+	}
 }
 
 static void pseudo_org(struct inctx *inp, struct symbol *sym)
 {
-	org = expression(inp, true);
+	list_value = org = expression(inp, true);
 	if (sym)
 		sym->value = org;
 }

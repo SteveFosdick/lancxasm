@@ -17,7 +17,7 @@ unsigned code_list_level = 1;
 unsigned src_list_level = 0;
 bool no_cmos = false;
 unsigned passno = 0;
-uint16_t org, org_code, org_dsect;
+uint16_t org, org_code, org_dsect, list_value;
 bool in_dsect, in_ds;
 uint8_t *objbytes = NULL;
 unsigned objalloc = LINE_MAX, objsize = 0;
@@ -90,7 +90,7 @@ static void list_extra(struct inctx *inp, uint8_t *bytes)
 
 static void list_line(struct inctx *inp)
 {
-	fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, org);
+	fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, list_value);
 	switch(objsize) {
 		case 0:
 			fputs("        ", list_fp);
@@ -126,6 +126,7 @@ static void list_line(struct inctx *inp)
 
 static void asm_line(struct inctx *inp)
 {
+	list_value = org;
 	int ch = *inp->lineptr;
 	if (ch >= 'a' && ch <= 'z')
 		ch &= 0xdf;
@@ -208,7 +209,7 @@ int main(int argc, char **argv)
     while ((opt = getopt(argc, argv, "ac:f:l:o:rs")) != -1) {
         switch(opt) {
             case 'a':
-                symbol_ade_mode();
+                symbol_cmp = symbol_cmp_ade;
                 break;
             case 'c':
                 code_list_level = atoi(optarg);
@@ -244,6 +245,7 @@ int main(int argc, char **argv)
 					status = 3;
 				}
 				else {
+					symbol_enter = symbol_enter_pass1;
 					asm_pass(argc, argv);
 					if (err_count) {
 						fprintf(stderr, "lancxasm: %u errors, on pass 1, pass 2 skipped\n", err_count);
@@ -251,6 +253,7 @@ int main(int argc, char **argv)
 					}
 					else {
 						passno = 1;
+						symbol_enter = symbol_enter_pass2;
 						asm_pass(argc, argv);
 						if (err_count) {
 							fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);

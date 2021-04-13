@@ -9,28 +9,25 @@ static unsigned sym_max = 0;
 static unsigned sym_count = 0;
 static unsigned sym_col, sym_cols;
 
-static int sym_cmp_lancs(const void *a, const void *b)
+static int symbol_cmp_lancs(const void *a, const void *b)
 {
 	const struct symbol *sa = a;
 	const struct symbol *sb = b;
 	return strcmp(sa->name, sb->name);
 }
 
-static int sym_cmp_ade(const void *a, const void *b)
+int symbol_cmp_ade(const void *a, const void *b)
 {
 	const struct symbol *sa = a;
 	const struct symbol *sb = b;
 	return strncmp(sa->name, sb->name, 6);
 }
 
-static int (*sym_cmp)(const void *, const void *) = sym_cmp_lancs;
+int (*symbol_cmp)(const void *, const void *) = symbol_cmp_lancs;
+struct symbol *(*symbol_enter)(struct inctx *inp);
 
-void symbol_ade_mode(void)
-{
-	sym_cmp = sym_cmp_ade;
-}
 
-struct symbol *symbol_enter(struct inctx *inp)
+struct symbol *symbol_enter_pass1(struct inctx *inp)
 {
 	char *ptr = inp->lineptr;
 	int ch = *ptr;
@@ -55,7 +52,7 @@ struct symbol *symbol_enter(struct inctx *inp)
 					*sym_ptr++ = ch;
 				}
 				*sym_ptr = 0;
-				struct symbol **res = tsearch(sym, &symbols, sym_cmp);
+				struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
 				if (!res)
 					asm_error(inp, "out of memory allocating a symbol");
 				else if (*res != sym) {
@@ -83,9 +80,9 @@ struct symbol *symbol_enter(struct inctx *inp)
 	return NULL;
 }
 
-uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
+static void *symbol_find(struct inctx *inp, char *name)
 {
-	char name[LINE_MAX], *nptr = name;
+	char *nptr = name;
 	int ch = *inp->lineptr;
 	if (ch >= 'a' && ch <= 'z')
 		ch &= 0xdf;
@@ -97,9 +94,29 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 	}
 	*nptr = 0;
 	struct symbol *sym = (struct symbol *)(name - offsetof(struct symbol, name));
-	void *node = tfind(sym, &symbols, sym_cmp);
+	return tfind(sym, &symbols, symbol_cmp);
+}
+
+struct symbol *symbol_enter_pass2(struct inctx *inp)
+{
+	char name[LINE_MAX];
+	void *node = symbol_find(inp, name);
+	if (*inp->lineptr == ':')
+		++inp->lineptr;
+	if (node)
+		return *(struct symbol **)node;
+	else {
+		asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", name);
+		return NULL;
+	}
+}
+
+uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
+{
+	char name[LINE_MAX];
+	void *node = symbol_find(inp, name);
 	if (node) {
-		sym = *(struct symbol **)node;
+		struct symbol *sym = *(struct symbol **)node;
 		return sym->value;
 	}
 	else {
