@@ -164,6 +164,39 @@ static void pseudo_ds(struct inctx *inp, struct symbol *sym)
 	plant_bytes(inp, expression(inp, true), 0);
 }
 
+static unsigned hex_nyb(struct inctx *inp, int ch)
+{
+	if (ch >= '0' && ch <= '9')
+		return ch - '0';
+	if (ch >= 'A' && ch <= 'F')
+		return ch - 'A' + 10;
+	if (ch >= 'a' && ch <= 'f')
+		return ch - 'a' + 10;
+	asm_error(inp, "bad hex digit '%c'", ch);
+	return 0;
+}
+
+static void pseudo_hex(struct inctx *inp, struct symbol *sym)
+{
+	int ch = non_space(inp);
+	if (ch == '"' || ch == '\'') {
+		int endq = ch;
+		while ((ch = *++inp->lineptr) != endq || ch == '\n') {
+			unsigned byte = hex_nyb(inp, ch);
+			ch = *++inp->lineptr;
+			if (ch == endq || ch == '\n') {
+				plant_bytes(inp, 1, byte << 4);
+				break;
+			}
+			plant_bytes(inp, 1, (byte << 4) | hex_nyb(inp, ch));
+		}
+		if (ch != endq)
+			asm_error(inp, "missing closing quote");
+	}
+	else
+		asm_error(inp, "missing opening quote");
+}
+
 static void pseudo_clst(struct inctx *inp, struct symbol *sym)
 {
 	code_list_level = expression(inp, true);
@@ -285,6 +318,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "DW",      pseudo_dfw     },
 	{ "DFDB",    pseudo_dfdb    },
 	{ "EQU",     pseudo_equ     },
+	{ "HEX",     pseudo_hex     },
 	{ "INCLUDE", pseudo_include },
 	{ "LST",     pseudo_lst     },
 	{ "ORG",     pseudo_org     },
