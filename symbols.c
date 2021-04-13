@@ -111,7 +111,7 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 
 static void print_one(const void *nodep, VISIT which, int depth)
 {
-	if (which == leaf) {
+	if (which == leaf || which == postorder) {
 		const struct symbol *sym = *(const struct symbol **)nodep;
 		if (++sym_col == sym_cols) {
 			fprintf(list_fp, "%-*s &%04X\n", sym_max, sym->name, sym->value);
