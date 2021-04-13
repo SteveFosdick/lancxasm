@@ -136,7 +136,7 @@ static void m6502_auto_pick(struct inctx *inp, uint16_t code8, uint16_t code16, 
 static void m6502_indirect(struct inctx *inp, const struct optab_ent *ptr)
 {
 	++inp->lineptr;
-	uint16_t value = expression(inp);
+	uint16_t value = expression(inp, passno);
 	int ch = *inp->lineptr;
 	if (ch == ',') {
 		/* should be indexed (by X) indirect. */
@@ -170,7 +170,7 @@ static void m6502_indirect(struct inctx *inp, const struct optab_ent *ptr)
 
 static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 {
-	uint16_t value = expression(inp);
+	uint16_t value = expression(inp, passno);
 	int ch = *inp->lineptr;
 	if (ch == ',') {
 		/* indexed addressing */
@@ -211,7 +211,7 @@ bool m6502_op(struct inctx *inp, const char *op)
 				m6502_implied(inp, ptr);
 			else if (ch == '#') {
 				++inp->lineptr;
-				m6502_two_byte(inp, ptr->imm, expression(inp));
+				m6502_two_byte(inp, ptr->imm, expression(inp, passno));
 			}
 			else if (ch == '(')
 				m6502_indirect(inp, ptr);

@@ -6,12 +6,12 @@
 static void pseudo_equ(struct inctx *inp, struct symbol *sym)
 {
 	if (sym)
-		sym->value = expression(inp);
+		sym->value = expression(inp, passno);
 }
 
 static void pseudo_org(struct inctx *inp, struct symbol *sym)
 {
-	org = expression(inp);
+	org = expression(inp, true);
 	if (sym)
 		sym->value = org;
 }
@@ -124,17 +124,17 @@ static void plant_data(struct inctx *inp, const char *desc, void (*planter)(stru
 		ch = non_space(inp);
 		if (ch == '[') {
 			++inp->lineptr;
-			size_t count = expression(inp);
+			size_t count = expression(inp, true);
 			ch = non_space(inp);
 			if (ch == ']') {
 				++inp->lineptr;
-				planter(inp, count, expression(inp));
+				planter(inp, count, expression(inp, passno));
 			}
 			else
 				asm_error(inp, "missing ]");
 		}
 		else
-			planter(inp, 1, expression(inp));
+			planter(inp, 1, expression(inp, passno));
 		ch = *inp->lineptr++;
 	} while (ch == ',');
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
@@ -158,17 +158,17 @@ static void pseudo_dfdb(struct inctx *inp, struct symbol *sym)
 
 static void pseudo_ds(struct inctx *inp, struct symbol *sym)
 {
-	plant_bytes(inp, expression(inp), 0);
+	plant_bytes(inp, expression(inp, true), 0);
 }
 
 static void pseudo_clst(struct inctx *inp, struct symbol *sym)
 {
-	code_list_level = expression(inp);
+	code_list_level = expression(inp, true);
 }
 
 static void pseudo_lst(struct inctx *inp, struct symbol *sym)
 {
-	src_list_level = expression(inp);
+	src_list_level = expression(inp, true);
 }
 
 static void pseudo_dsect(struct inctx *inp, struct symbol *sym)

@@ -36,13 +36,13 @@ extern unsigned objalloc, objsize;
 
 extern void symbol_ade_mode(void);
 extern struct symbol *symbol_enter(struct inctx *inp);
-extern uint16_t symbol_lookup(struct inctx *inp);
+extern uint16_t symbol_lookup(struct inctx *inp, bool no_undef);
 extern void symbol_print(void);
 
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
 extern void asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);
-extern int expression(struct inctx *inp);
+extern int expression(struct inctx *inp, bool no_undef);
 extern bool m6502_op(struct inctx *inp, const char *op);
 extern bool pseudo_op(struct inctx *inp, const char *op, struct symbol *sym);
 

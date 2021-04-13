@@ -1,7 +1,7 @@
 #include "lancxasm.h"
 #include <stdlib.h>
 
-static int expr_term(struct inctx *inp)
+static int expr_term(struct inctx *inp, bool no_undef)
 {
     int value, ch = *inp->lineptr;
     if (ch == '*')
@@ -42,7 +42,7 @@ static int expr_term(struct inctx *inp)
     else if (ch >= '0' && ch <= '9')
         value = strtoul(inp->lineptr, &inp->lineptr, 10);
     else if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'))
-		value = symbol_lookup(inp);
+		value = symbol_lookup(inp, no_undef);
 	else {
 		asm_error(inp, "invalid expression");
 		value = org;
@@ -53,12 +53,12 @@ static int expr_term(struct inctx *inp)
 	return value;
 }
 
-static int expr_bracket(struct inctx *inp)
+static int expr_bracket(struct inctx *inp, bool no_undef)
 {
 	int ch = *inp->lineptr;
     if (ch == '(') {
         ++inp->lineptr;
-        int value = expression(inp);
+        int value = expression(inp, no_undef);
         if (*inp->lineptr == ')')
 			do ch = *++inp->lineptr; while (ch == ' ' || ch == '\t' || ch == 0xdd);
         else
@@ -66,115 +66,115 @@ static int expr_bracket(struct inctx *inp)
         return value;
     }
     else
-		return expr_term(inp);
+		return expr_term(inp, no_undef);
 }
 
-static int expr_unary(struct inctx *inp)
+static int expr_unary(struct inctx *inp, bool no_undef)
 {
     int ch = *inp->lineptr;
     if (ch == '-') {
         ++inp->lineptr;
-        return -expr_bracket(inp);
+        return -expr_bracket(inp, no_undef);
     }
     else if (ch == '~') {
         ++inp->lineptr;
-        return ~expr_bracket(inp);
+        return ~expr_bracket(inp, no_undef);
     }
     else
-        return expr_bracket(inp);
+        return expr_bracket(inp, no_undef);
 }
 
-static int expr_bitwise(struct inctx *inp)
+static int expr_bitwise(struct inctx *inp, bool no_undef)
 {
-    int value = expr_unary(inp);
+    int value = expr_unary(inp, no_undef);
     for (;;) {
         int ch = *inp->lineptr;
         if (ch == '&') {
             ++inp->lineptr;
-            value &= expr_unary(inp);
+            value &= expr_unary(inp, no_undef);
         }
         else if (ch == '!') {
             ++inp->lineptr;
-            value |= expr_unary(inp);
+            value |= expr_unary(inp, no_undef);
         }
         else
             return value;
     }
 }
 
-static int expr_compare(struct inctx *inp)
+static int expr_compare(struct inctx *inp, bool no_undef)
 {
-    int value = expr_bitwise(inp);
+    int value = expr_bitwise(inp, no_undef);
     for (;;) {
         int ch = *inp->lineptr;
         if (ch == '=') {
             ++inp->lineptr;
-            value = (value == expr_bitwise(inp)) ? -1 : 0;
+            value = (value == expr_bitwise(inp, no_undef)) ? -1 : 0;
         }
         else if (ch == '#') {
             ++inp->lineptr;
-            value = (value != expr_bitwise(inp)) ? -1 : 0;
+            value = (value != expr_bitwise(inp, no_undef)) ? -1 : 0;
         }
         else if (ch == '>') {
             ++inp->lineptr;
-            value = (value > expr_bitwise(inp)) ? -1 : 0;
+            value = (value > expr_bitwise(inp, no_undef)) ? -1 : 0;
         }
         else if (ch == '<') {
             ++inp->lineptr;
-            value = (value < expr_bitwise(inp)) ? -1 : 0;
+            value = (value < expr_bitwise(inp, no_undef)) ? -1 : 0;
         }
         else
             return value;
     }
 }
 
-static int expr_muldiv(struct inctx *inp)
+static int expr_muldiv(struct inctx *inp, bool no_undef)
 {
-    int value = expr_compare(inp);
+    int value = expr_compare(inp, no_undef);
     for (;;) {
         int ch = *inp->lineptr;
         if (ch == '*') {
             ++inp->lineptr;
-            value *= expr_compare(inp);
+            value *= expr_compare(inp, no_undef);
         }
         else if (ch == '/') {
             ++inp->lineptr;
-            value /= expr_compare(inp);
+            value /= expr_compare(inp, no_undef);
         }
         else
             return value;
     }
 }
 
-static int expr_addsub(struct inctx *inp)
+static int expr_addsub(struct inctx *inp, bool no_undef)
 {
-    int value = expr_muldiv(inp);
+    int value = expr_muldiv(inp, no_undef);
     for (;;) {
         int ch = *inp->lineptr;
         if (ch == '+') {
             ++inp->lineptr;
-            value += expr_muldiv(inp);
+            value += expr_muldiv(inp, no_undef);
         }
         else if (ch == '-') {
             ++inp->lineptr;
-            value -= expr_muldiv(inp);
+            value -= expr_muldiv(inp, no_undef);
         }
         else
             return value;
     }
 }
 
-int expression(struct inctx *inp)
+int expression(struct inctx *inp, bool no_undef)
 {
     int ch = non_space(inp);
     if (ch == '>') {
         ++inp->lineptr;
-        return expr_addsub(inp) & 0xff;
+        return expr_addsub(inp, no_undef) & 0xff;
     }
     else if (ch == '<') {
         ++inp->lineptr;
-        return (expr_addsub(inp) >> 8) & 0xff;
+        return (expr_addsub(inp, no_undef) >> 8) & 0xff;
     }
     else
-        return expr_addsub(inp);
+        return expr_addsub(inp, no_undef);
 }

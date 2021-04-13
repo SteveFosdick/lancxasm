@@ -83,7 +83,7 @@ struct symbol *symbol_enter(struct inctx *inp)
 	return NULL;
 }
 
-uint16_t symbol_lookup(struct inctx *inp)
+uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 {
 	char name[LINE_MAX], *nptr = name;
 	int ch = *inp->lineptr;
@@ -103,7 +103,7 @@ uint16_t symbol_lookup(struct inctx *inp)
 		return sym->value;
 	}
 	else {
-		if (passno)
+		if (no_undef)
 			asm_error(inp, "symbol %s not found", name);
 		return org;
 	}
