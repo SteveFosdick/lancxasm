@@ -120,24 +120,28 @@ static void plant_dbytes(struct inctx *inp, size_t count, uint16_t word)
 	}
 }
 
+static void plant_item(struct inctx *inp, int ch, void (*planter)(struct inctx *inp, size_t count, uint16_t value))
+{
+	if (ch == '[') {
+		++inp->lineptr;
+		size_t count = expression(inp, true);
+		ch = non_space(inp);
+		if (ch == ']') {
+			++inp->lineptr;
+			planter(inp, count, expression(inp, passno));
+		}
+		else
+			asm_error(inp, "missing ]");
+	}
+	else
+		planter(inp, 1, expression(inp, passno));
+}
+
 static void plant_data(struct inctx *inp, const char *desc, void (*planter)(struct inctx *inp, size_t count, uint16_t value))
 {
 	int ch;
 	do {
-		ch = non_space(inp);
-		if (ch == '[') {
-			++inp->lineptr;
-			size_t count = expression(inp, true);
-			ch = non_space(inp);
-			if (ch == ']') {
-				++inp->lineptr;
-				planter(inp, count, expression(inp, passno));
-			}
-			else
-				asm_error(inp, "missing ]");
-		}
-		else
-			planter(inp, 1, expression(inp, passno));
+		plant_item(inp, non_space(inp), planter);
 		ch = *inp->lineptr++;
 	} while (ch == ',');
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
@@ -163,6 +167,24 @@ static void pseudo_ds(struct inctx *inp, struct symbol *sym)
 {
 	plant_bytes(inp, expression(inp, true), 0);
 }
+
+static void pseudo_data(struct inctx *inp, struct symbol *sym)
+{
+	int ch;
+	do {
+		ch = non_space(inp);
+		if (ch == '"' || ch == '\'') {
+			uint8_t *end = parse_str(inp, objbytes + objsize);
+			objsize = end - objbytes;
+			++inp->lineptr;
+		}
+		else
+			plant_item(inp, ch, plant_bytes);
+		ch = *inp->lineptr++;
+	} while (ch == ',');
+	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
+		asm_error(inp, "bad %s expression", "data");
+}	
 
 static unsigned hex_nyb(struct inctx *inp, int ch)
 {
@@ -309,6 +331,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "CLST",    pseudo_clst    },
 	{ "CODE",    pseudo_code    },
 	{ "CSTR",    pseudo_cstr    },
+	{ "DATA",    pseudo_data    },
 	{ "DDB",     pseudo_dfdb    },
 	{ "DEND",    pseudo_dend    },
 	{ "DFB",     pseudo_dfb     },

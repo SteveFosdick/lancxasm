@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define LINE_MAX 132
+#define LINE_MAX 256
 
 struct inctx {
 	FILE *fp;

@@ -6,7 +6,7 @@ static int expr_term(struct inctx *inp, bool no_undef)
     int value, ch = *inp->lineptr;
     if (ch == '*')
 		value = org;
-	else if (ch == '\'') {
+	else if (ch == '\'' || ch == '"') {
         bool ctrl = false;
         bool topset = false;
         ch = *++inp->lineptr;
@@ -30,10 +30,8 @@ static int expr_term(struct inctx *inp, bool no_undef)
         else if (topset)
             value |= 0x80;
         ch = *++inp->lineptr;
-        if (ch == '\'')
+        if (ch == '\'' || ch == '"')
             ++inp->lineptr;
-        else
-            asm_error(inp, "missing ' in character constant");
     }
     else if (ch == '%')
         value = strtoul(inp->lineptr + 1, &inp->lineptr, 2);
