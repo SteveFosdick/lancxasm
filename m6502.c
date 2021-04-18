@@ -95,6 +95,19 @@ static void m6502_implied(struct inctx *inp, const struct optab_ent *ptr)
 	}
 }
 
+static void m6502_accumulator(struct inctx *inp, const struct optab_ent *ptr)
+{
+	uint16_t code = ptr->acc;
+	if (code == 0xffff)
+		asm_error(inp, "accumulator addressings is not valid for %s", ptr->mnemonic);
+	else if (code & 0x100 && no_cmos)
+		asm_error(inp, "%s is a CMOS-only instruction", ptr->mnemonic);
+	else {
+		objbytes[0] = code;
+		objsize = 1;
+	}
+}
+	
 static void m6502_two_byte(struct inctx *inp, uint16_t code, uint16_t value)
 {
 	if (code == 0xffff)
@@ -217,6 +230,13 @@ bool m6502_op(struct inctx *inp, const char *op)
 			}
 			else if (ch == '(')
 				m6502_indirect(inp, ptr);
+			else if (ch == 'A' || ch == 'a') {
+				ch = inp->lineptr[1];
+				if (ch == ' ' || ch == '\t' || ch == ';' || ch == '\\' || ch == '*' || ch == '\n')
+					m6502_accumulator(inp, ptr);
+				else
+					m6502_others(inp, ptr);
+			}
 			else
 				m6502_others(inp, ptr);
 			return true;
