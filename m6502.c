@@ -140,8 +140,10 @@ static void m6502_indirect(struct inctx *inp, const struct optab_ent *ptr)
 	int ch = *inp->lineptr;
 	if (ch == ',') {
 		/* should be indexed (by X) indirect. */
+		++inp->lineptr;
 		ch = non_space(inp);
 		if (ch == 'X' || ch == 'x') {
+			++inp->lineptr;
 			if (non_space(inp) == ')')
 				m6502_two_byte(inp, ptr->indx, value);
 			else
