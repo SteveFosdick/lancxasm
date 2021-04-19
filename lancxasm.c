@@ -109,7 +109,24 @@ static void list_line(struct inctx *inp)
 		putc('\n', list_fp);
 	else {
 		putc(' ', list_fp);
-		fwrite(inp->linebuf, inp->lineend - inp->linebuf + 1, 1, list_fp);
+		unsigned col = 0;
+		const char *ptr = inp->linebuf;
+		size_t remain = inp->lineend - ptr;
+		const char *tab = memchr(ptr, '\t', remain);
+		while (tab) {
+			size_t chars = tab - ptr;
+			fwrite(ptr, chars, 1, list_fp);
+			col += chars;
+			int spaces = 8 - (col % 8);
+			col += spaces;
+			while (spaces--)
+				putc(' ', list_fp);
+			ptr = tab + 1;
+			remain = inp->lineend - ptr;
+			tab = memchr(ptr, '\t', remain);
+		}
+		if (remain >= 0)
+			fwrite(ptr, remain+1, 1, list_fp);
 	}
 	if (err_message) {
 		fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
