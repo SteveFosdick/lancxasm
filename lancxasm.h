@@ -23,6 +23,7 @@ struct symbol {
 	char name[LINE_MAX];
 };
 
+/* lancxasm.c */
 extern FILE *obj_fp;
 extern FILE *list_fp;
 extern unsigned code_list_level;
@@ -34,6 +35,10 @@ extern bool in_dsect, in_ds;
 extern uint8_t *objbytes;
 extern unsigned objalloc, objsize;
 
+extern void asm_error(struct inctx *inp, const char *fmt, ...);
+extern void asm_file(struct inctx *inp);
+extern int non_space(struct inctx *inp);
+
 /* symbols.c */
 extern int (*symbol_cmp)(const void *, const void *);
 extern int symbol_cmp_ade(const void *a, const void *b);
@@ -42,11 +47,6 @@ extern struct symbol *symbol_enter_pass1(struct inctx *inp);
 extern struct symbol *symbol_enter_pass2(struct inctx *inp);
 extern uint16_t symbol_lookup(struct inctx *inp, bool no_undef);
 extern void symbol_print(void);
-
-/* lancxasm.c */
-extern void asm_error(struct inctx *inp, const char *fmt, ...);
-extern void asm_file(struct inctx *inp);
-extern int non_space(struct inctx *inp);
 
 /* expression.c */
 extern int expression(struct inctx *inp, bool no_undef);
