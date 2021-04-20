@@ -58,7 +58,8 @@ static void asm_operation(struct inctx *inp, struct symbol *sym)
 		}
 		*op_ptr = 0;
 		if (!m6502_op(inp, op))
-			pseudo_op(inp, op, sym);
+			if (!pseudo_op(inp, op, sym))
+				asm_error(inp, "unrecognised opcode '%s'", op);
 	}
 }
 
