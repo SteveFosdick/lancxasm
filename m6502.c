@@ -90,8 +90,8 @@ static void m6502_implied(struct inctx *inp, const struct optab_ent *ptr)
 	else if (code & 0x100 && no_cmos)
 		asm_error(inp, "%s is a CMOS-only instruction", ptr->mnemonic);
 	else {
-		objbytes[0] = code;
-		objsize = 1;
+		objcode.str[0] = code;
+		objcode.used = 1;
 	}
 }
 
@@ -103,8 +103,8 @@ static void m6502_accumulator(struct inctx *inp, const struct optab_ent *ptr)
 	else if (code & 0x100 && no_cmos)
 		asm_error(inp, "%s is a CMOS-only instruction", ptr->mnemonic);
 	else {
-		objbytes[0] = code;
-		objsize = 1;
+		objcode.str[0] = code;
+		objcode.used = 1;
 	}
 }
 	
@@ -115,9 +115,9 @@ static void m6502_two_byte(struct inctx *inp, uint16_t code, uint16_t value)
 	else if (code & 0x100 && no_cmos)
 		asm_error(inp, "This is CMOS-only");
 	else {
-		objbytes[0] = code;
-		objbytes[1] = value;
-		objsize = 2;
+		objcode.str[0] = code;
+		objcode.str[1] = value;
+		objcode.used = 2;
 	}
 }
 
@@ -128,19 +128,19 @@ static void m6502_three_byte(struct inctx *inp, uint16_t code, uint16_t value)
 	else if (code & 0x100 && no_cmos)
 		asm_error(inp, "This is CMOS-only");
 	else {
-		objbytes[0] = code;
-		objbytes[1] = value;
-		objbytes[2] = value >> 8;
-		objsize = 3;
+		objcode.str[0] = code;
+		objcode.str[1] = value;
+		objcode.str[2] = value >> 8;
+		objcode.used = 3;
 	}
 }
 
 static void m6502_auto_pick(struct inctx *inp, uint16_t code8, uint16_t code16, uint16_t value)
 {
 	if (code8 != 0xffff && value < 0x100 && !(code8 & 0x100 && no_cmos)) {
-		objbytes[0] = code8;
-		objbytes[1] = value;
-		objsize = 2;
+		objcode.str[0] = code8;
+		objcode.str[1] = value;
+		objcode.used = 2;
 	}
 	else
 		m6502_three_byte(inp, code16, value);
@@ -206,42 +206,44 @@ static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 				asm_error(inp, "backward branch of %d bytes is out of range by %d bytes", -offs, -offs - 128);
 			else if (offs > 127)
 				asm_error(inp, "forward branch of %d bytes is out of range by %d bytes", offs, offs - 127);
-			objbytes[0] = code;
-			objbytes[1] = offs;
-			objsize = 2;
+			objcode.str[0] = code;
+			objcode.str[1] = offs;
+			objcode.used = 2;
 		}
 		else
 			m6502_auto_pick(inp, ptr->zp, ptr->abs, value);
 	}
 }
 
-bool m6502_op(struct inctx *inp, const char *op)
+bool m6502_op(struct inctx *inp)
 {
-	const struct optab_ent *ptr = optab;
-	const struct optab_ent *end = optab + sizeof(optab) / sizeof(struct optab_ent);
-	while (ptr < end) {
-		if (!strcmp(op, ptr->mnemonic)) {
-			int ch = non_space(inp);
-			if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
-				m6502_implied(inp, ptr);
-			else if (ch == '#') {
-				++inp->lineptr;
-				m6502_two_byte(inp, ptr->imm, expression(inp, passno));
-			}
-			else if (ch == '(')
-				m6502_indirect(inp, ptr);
-			else if (ch == 'A' || ch == 'a') {
-				ch = inp->lineptr[1];
-				if (ch == ' ' || ch == '\t' || ch == ';' || ch == '\\' || ch == '*' || ch == '\n')
-					m6502_accumulator(inp, ptr);
+	if (opname.used == 3) {
+		const struct optab_ent *ptr = optab;
+		const struct optab_ent *end = optab + sizeof(optab) / sizeof(struct optab_ent);
+		while (ptr < end) {
+			if (!memcmp(opname.str, ptr->mnemonic, 3)) {
+				int ch = non_space(inp);
+				if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
+					m6502_implied(inp, ptr);
+				else if (ch == '#') {
+					++inp->lineptr;
+					m6502_two_byte(inp, ptr->imm, expression(inp, passno));
+				}
+				else if (ch == '(')
+					m6502_indirect(inp, ptr);
+				else if (ch == 'A' || ch == 'a') {
+					ch = inp->lineptr[1];
+					if (ch == ' ' || ch == '\t' || ch == ';' || ch == '\\' || ch == '*' || ch == '\n')
+						m6502_accumulator(inp, ptr);
+					else
+						m6502_others(inp, ptr);
+				}
 				else
 					m6502_others(inp, ptr);
+				return true;
 			}
-			else
-				m6502_others(inp, ptr);
-			return true;
+			++ptr;
 		}
-		++ptr;
 	}
 	return false;
 }

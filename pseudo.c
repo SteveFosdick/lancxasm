@@ -19,7 +19,7 @@ static void pseudo_org(struct inctx *inp, struct symbol *sym)
 		sym->value = org;
 }
 
-static uint8_t *parse_str(struct inctx *inp, uint8_t *dest)
+static void pseudo_asc(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
@@ -38,85 +38,62 @@ static uint8_t *parse_str(struct inctx *inp, uint8_t *dest)
 						ch = ch2 | 0x80;
 				}
 			}
-			*dest++ = ch;
+			dstr_add_ch(&objcode, ch);
 		}
 		if (ch != endq)
 			asm_error(inp, "missing closing quote");
 	}
 	else
 		asm_error(inp, "missing opening quote");
-	return dest;
-}
-
-static void pseudo_asc(struct inctx *inp, struct symbol *sym)
-{
-	uint8_t *end = parse_str(inp, objbytes);
-	objsize = end - objbytes;
 }
 
 static void pseudo_str(struct inctx *inp, struct symbol *sym)
 {
-	uint8_t *end = parse_str(inp, objbytes);
-	*end++ = '\r';
-	objsize = end - objbytes;
+	pseudo_asc(inp, sym);
+	dstr_add_ch(&objcode, '\r');
 }
 
 static void pseudo_casc(struct inctx *inp, struct symbol *sym)
 {
-	uint8_t *end = parse_str(inp, objbytes+1);
-	objsize = end - objbytes;
-	objbytes[0] = objsize - 1;
+	size_t posn = objcode.used;
+	dstr_add_ch(&objcode, 0);
+	pseudo_asc(inp, sym);
+	objcode.str[posn] = objcode.used - posn;
 }
 
 static void pseudo_cstr(struct inctx *inp, struct symbol *sym)
 {
-	uint8_t *end = parse_str(inp, objbytes+1);
-	*end++ = '\r';
-	objsize = end - objbytes;
-	objbytes[0] = objsize - 1;
+	size_t posn = objcode.used;
+	dstr_add_ch(&objcode, 0);
+	pseudo_asc(inp, sym);
+	dstr_add_ch(&objcode, '\r');
+	objcode.str[posn] = objcode.used - posn;
 }
-
-static size_t check_grow_buffer(struct inctx *inp, size_t size)
-{
-	size_t reqd = objsize + size;
-	if (reqd > objalloc) {
-		uint8_t *newbuf = realloc(objbytes, reqd);
-		if (newbuf) {
-			objbytes = newbuf;
-			objalloc = reqd;
-		}
-		else {
-			asm_error(inp, "out of memory for code buffer");
-			return objalloc - objsize;
-		}
-	}
-	return size;
-}		
 
 static void plant_bytes(struct inctx *inp, size_t count, uint16_t byte)
 {
-	size_t bytes = check_grow_buffer(inp, count);
-	while (bytes--)
-		objbytes[objsize++] = byte;
+	dstr_grow(&objcode, count);
+	memset(objcode.str + objcode.used, byte, count);
+	objcode.used += count;
 }
 
 static void plant_words(struct inctx *inp, size_t count, uint16_t word)
 {
-	size_t bytes = check_grow_buffer(inp, count << 1) & ~1;
-	while (bytes) {
-		objbytes[objsize++] = word;
-		objbytes[objsize++] = word >> 8;
-		bytes -= 2;
+	dstr_grow(&objcode, count << 1);
+	char high = word >> 8;
+	while (count--) {
+		objcode.str[objcode.used++] = word;
+		objcode.str[objcode.used++] = high;
 	}
 }
 
 static void plant_dbytes(struct inctx *inp, size_t count, uint16_t word)
 {
-	size_t bytes = check_grow_buffer(inp, count << 1) & ~1;
-	while (bytes) {
-		objbytes[objsize++] = word >> 8;
-		objbytes[objsize++] = word;
-		bytes -= 2;
+	dstr_grow(&objcode, count << 1);
+	char high = word >> 8;
+	while (count--) {
+		objcode.str[objcode.used++] = high;
+		objcode.str[objcode.used++] = word;
 	}
 }
 
@@ -174,8 +151,7 @@ static void pseudo_data(struct inctx *inp, struct symbol *sym)
 	do {
 		ch = non_space(inp);
 		if (ch == '"' || ch == '\'') {
-			uint8_t *end = parse_str(inp, objbytes + objsize);
-			objsize = end - objbytes;
+			pseudo_asc(inp, sym);
 			++inp->lineptr;
 		}
 		else
@@ -251,72 +227,65 @@ static void pseudo_dend(struct inctx *inp, struct symbol *sym)
 		asm_error(inp, "dend without dsect");
 }
 
-static FILE *parse_open(struct inctx *inp, char *filename, const char *mode)
+static FILE *parse_open(struct inctx *inp, struct dstring *fn, const char *mode)
 {
-	char *ptr = filename;
+	dstr_empty(fn, 20);
 	int ch = non_space(inp);
 	while (ch != '\n' && ch != ' ' && ch != '\t' && ch != 0xdd) {
-		*ptr++ = ch;
+		dstr_add_ch(fn, ch);
 		ch = *++inp->lineptr;
 	}
-	*ptr = 0;
-	return fopen(filename, mode);
+	dstr_add_ch(fn, 0);
+	return fopen(fn->str, mode);
 }
 
 static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 {
-	char filename[LINE_MAX];
-	FILE *fp = parse_open(inp, filename, "r");
+	struct dstring filename;
+	FILE *fp = parse_open(inp, &filename, "r");
 	if (fp) {
 		fclose(inp->fp);
 		inp->fp = fp;
-		inp->name = filename;
+		inp->name = filename.str;
 		asm_file(inp);
 	}
 	else
 		asm_error(inp, "unable to open chained file %s: %s", filename, strerror(errno));
+	free(filename.str);
 }
 
 static void pseudo_include(struct inctx *inp, struct symbol *sym)
 {
-	char filename[LINE_MAX];
-	FILE *fp = parse_open(inp, filename, "r");
+	struct dstring filename;
+	FILE *fp = parse_open(inp, &filename, "r");
 	if (fp) {
 		struct inctx incfile;
 		incfile.fp = fp;
-		incfile.name = filename;
+		incfile.name = filename.str;
 		incfile.whence = 'I';
 		asm_file(&incfile);
 	}
 	else
 		asm_error(inp, "unable to open include file %s: %s", filename, strerror(errno));
+	free(filename.str);
 }
 
 static void pseudo_code(struct inctx *inp, struct symbol *sym)
 {
-	char filename[LINE_MAX];
-	FILE *fp = parse_open(inp, filename, "rb");
+	struct dstring filename;
+	FILE *fp = parse_open(inp, &filename, "rb");
 	if (fp) {
 		fseek(fp, 0, SEEK_END);
 		size_t size = ftell(fp);
 		rewind(fp);
-		if (size > objalloc) {
-			uint8_t *newbuf = realloc(objbytes, size);
-			if (newbuf) {
-				objbytes = newbuf;
-				objalloc = size;
-			}
-			else {
-				asm_error(inp, "no enough memory to read all of code file %s", filename);
-				size = objalloc;
-			}
-		}
-		if (fread(objbytes, size, 1, fp) == 1)
-			objsize = size;
+		dstr_grow(&objcode, size);
+		if (fread(objcode.str, size, 1, fp) == 1)
+			objcode.used = size;
 		else
 			asm_error(inp, "read error on code file %s: %s", filename, strerror(errno));
 		fclose(fp);
 	}
+	free(filename.str);
 }
 
 struct op_type {
@@ -348,12 +317,12 @@ static const struct op_type pseudo_ops[] = {
 	{ "STR",     pseudo_str     }
 };
 
-bool pseudo_op(struct inctx *inp, const char *op, struct symbol *sym)
+bool pseudo_op(struct inctx *inp, struct symbol *sym)
 {
 	const struct op_type *ptr = pseudo_ops;
 	const struct op_type *end = pseudo_ops + sizeof(pseudo_ops) / sizeof(struct op_type);
 	while (ptr < end) {
-		if (!strcmp(op, ptr->name)) {
+		if (!strncmp(opname.str, ptr->name, opname.used)) {
 			ptr->func(inp, sym);
 			return true;
 		}

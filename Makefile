@@ -1,7 +1,7 @@
 CC	= gcc
-CFLAGS	= -Og -g -Wall
+CFLAGS	= -O2 -g -Wall
 
-lancxasm: lancxasm.o expression.o pseudo.o m6502.o symbols.o
+lancxasm: dstring.o lancxasm.o expression.o pseudo.o m6502.o symbols.o
 
 lancxasm.o: lancxasm.h lancxasm.c
 

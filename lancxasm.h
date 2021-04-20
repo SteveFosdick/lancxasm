@@ -1,26 +1,27 @@
 #ifndef LANCXASM_INC
 #define LANCXASM_INC
 
+#include "dstring.h"
+
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#define LINE_MAX 256
+#define MIN_LINE 132
 
 struct inctx {
 	FILE *fp;
 	const char *name;
 	unsigned lineno;
-	char *linebuf;
+	struct dstring line;
 	char *lineptr;
-	char *lineend;
 	char whence;
 };
 
 struct symbol {
 	uint16_t value;
-	char name[LINE_MAX];
+	char name[1];
 };
 
 /* lancxasm.c */
@@ -32,8 +33,7 @@ extern bool no_cmos;
 extern unsigned passno;
 extern uint16_t org, org_code, org_dsect, list_value;
 extern bool in_dsect, in_ds;
-extern uint8_t *objbytes;
-extern unsigned objalloc, objsize;
+extern struct dstring objcode, opname;
 
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
 extern void asm_file(struct inctx *inp);
@@ -52,10 +52,10 @@ extern void symbol_print(void);
 extern int expression(struct inctx *inp, bool no_undef);
 
 /* m6502.c */
-extern bool m6502_op(struct inctx *inp, const char *op);
+extern bool m6502_op(struct inctx *inp);
 
 /* pseudo.c */
-extern bool pseudo_op(struct inctx *inp, const char *op, struct symbol *sym);
+extern bool pseudo_op(struct inctx *inp, struct symbol *sym);
 
 #endif
 	
