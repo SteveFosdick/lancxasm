@@ -5,11 +5,14 @@
 #include <string.h>
 #include <unistd.h>
 
-static bool skip_cond = false;
+static bool list_skip_cond = false;
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
 static unsigned err_count, err_column;
 static char *err_message = NULL;
+static bool cond_skipping;
+static unsigned cond_level;
+static uint8_t cond_stack[32];
 
 FILE *list_fp = NULL;
 FILE *obj_fp = NULL;
@@ -57,9 +60,29 @@ static void asm_operation(struct inctx *inp, struct symbol *sym)
 			ch = *++inp->lineptr;
 		}
 		*op_ptr = 0;
-		if (!m6502_op(inp, op))
-			if (!pseudo_op(inp, op, sym))
-				asm_error(inp, "unrecognised opcode '%s'", op);
+		if (!strcmp(op, "IF")) {
+			if (cond_level == (sizeof(cond_stack)-1))
+				asm_error(inp, "Too many levels of IF");
+			else {
+				cond_stack[cond_level++] = cond_skipping;
+				if (!cond_skipping)
+					cond_skipping = !expression(inp, true);
+			}
+		}
+		else if (!strcmp(op, "ELSE")) {
+			if (!cond_level)
+				asm_error(inp, "ELSE without IF");
+			else if (!cond_stack[cond_level-1])
+				cond_skipping = !cond_skipping;
+		}
+		else if (!strcmp(op, "FI")) {
+			if (!cond_level)
+				asm_error(inp, "FI without IF");
+			else
+				cond_skipping = cond_stack[--cond_level];
+		}
+		else if (!cond_skipping && !m6502_op(inp, op) && !pseudo_op(inp, op, sym))
+			asm_error(inp, "unrecognised opcode '%s'", op);
 	}
 }
 
@@ -197,13 +220,14 @@ void asm_file(struct inctx *inp)
 	fclose(inp->fp);
 }
 
-static int asm_pass(int argc, char **argv)
+static void asm_pass(int argc, char **argv)
 {
-    int status = 0;
     org = 0;
     org_code = 0;
     org_dsect = 0;
     in_dsect = false;
+    cond_skipping = false;
+    cond_level = 0;
 
     for (int argno = optind; argno < argc; argno++) {
 		const char *fn = argv[argno];
@@ -215,10 +239,13 @@ static int asm_pass(int argc, char **argv)
 		}
 		else {
 			fprintf(stderr, "lancxasm: unable to open source file '%s': %s\n", fn, strerror(errno));
-			status++;
+			err_count++;
 		}
 	}
-    return status;
+	if (cond_level) {
+		fprintf(stderr, "lancxasm: %u level(s) of IF still in-force (missing FI) at end of pass %u\n", cond_level, passno+1);
+		err_count++;
+	}
 }
 
 int main(int argc, char **argv)
@@ -245,7 +272,7 @@ int main(int argc, char **argv)
                 no_cmos = true;
                 break;
             case 's':
-                skip_cond = true;
+                list_skip_cond = true;
                 break;
             default:
                 status = 1;
