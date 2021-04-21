@@ -55,30 +55,32 @@ struct symbol *symbol_enter_pass1(struct inctx *inp)
 	const char *lab_start = inp->lineptr;
 	int tch = symbol_parse(inp);
 	if (tch) {
-		const char *lab_end = inp->lineptr;
-		size_t lab_size = lab_end - lab_start;
-		struct symbol *sym = malloc(sizeof(struct symbol) + lab_size + 1);
-		if (sym) {
-			symbol_uppercase(lab_start, lab_end, sym->name);
-			struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
-			if (!res)
+		if (!cond_skipping) {
+			const char *lab_end = inp->lineptr;
+			size_t lab_size = lab_end - lab_start;
+			struct symbol *sym = malloc(sizeof(struct symbol) + lab_size + 1);
+			if (sym) {
+				symbol_uppercase(lab_start, lab_end, sym->name);
+				struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
+				if (!res)
+					asm_error(inp, "out of memory allocating a symbol");
+				else if (*res != sym) {
+					asm_error(inp, "symbol %s already defined", sym->name);
+					free(sym);
+				}
+				else {
+					sym->value = org;
+					++sym_count;
+					if (lab_size > sym_max)
+						sym_max = lab_size;
+					if (tch == ':')
+						++inp->lineptr;
+					return sym;
+				}
+			}
+			else
 				asm_error(inp, "out of memory allocating a symbol");
-			else if (*res != sym) {
-				asm_error(inp, "symbol %s already defined", sym->name);
-				free(sym);
-			}
-			else {
-				sym->value = org;
-				++sym_count;
-				if (lab_size > sym_max)
-					sym_max = lab_size;
-				if (tch == ':')
-					++inp->lineptr;
-				return sym;
-			}
 		}
-		else
-			asm_error(inp, "out of memory allocating a symbol");
 	}
 	else
 		asm_error(inp, "invalid character in label");
@@ -90,18 +92,20 @@ struct symbol *symbol_enter_pass2(struct inctx *inp)
 	const char *lab_start = inp->lineptr;
 	int tch = symbol_parse(inp);
 	if (tch) {
-		const char *lab_end = inp->lineptr;
-		size_t lab_size = lab_end - lab_start;
-		char label[lab_size+1];
-		symbol_uppercase(lab_start, lab_end, label);
-		struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
-		void *node = tfind(sym, &symbols, symbol_cmp);
-		if (tch == ':')
-			++inp->lineptr;
-		if (node)
-			return *(struct symbol **)node;
-		else
-			asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
+		if (!cond_skipping) {
+			const char *lab_end = inp->lineptr;
+			size_t lab_size = lab_end - lab_start;
+			char label[lab_size+1];
+			symbol_uppercase(lab_start, lab_end, label);
+			struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
+			void *node = tfind(sym, &symbols, symbol_cmp);
+			if (tch == ':')
+				++inp->lineptr;
+			if (node)
+				return *(struct symbol **)node;
+			else
+				asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
+		}
 	}
 	else
 		asm_error(inp, "invalid character in label");
