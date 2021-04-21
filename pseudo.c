@@ -279,8 +279,10 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 		size_t size = ftell(fp);
 		rewind(fp);
 		dstr_grow(&objcode, size);
-		if (fread(objcode.str, size, 1, fp) == 1)
+		if (fread(objcode.str, size, 1, fp) == 1) {
 			objcode.used = size;
+			codefile = true;
+		}
 		else
 			asm_error(inp, "read error on code file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
 		fclose(fp);

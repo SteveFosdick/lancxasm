@@ -33,7 +33,7 @@ extern unsigned src_list_level;
 extern bool no_cmos;
 extern unsigned passno;
 extern uint16_t org, org_code, org_dsect, list_value;
-extern bool in_dsect, in_ds, cond_skipping;
+extern bool in_dsect, in_ds, codefile, cond_skipping;
 extern struct dstring objcode;
 
 __attribute__((format (printf, 2, 3)))
