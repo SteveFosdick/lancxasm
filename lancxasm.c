@@ -85,7 +85,7 @@ static void asm_operation(struct inctx *inp, struct symbol *sym)
 		else if (!cond_skipping) {
 			if (opsize != 3 || !m6502_op(inp, opname))
 				if (!pseudo_op(inp, opname, opsize, sym))
-					asm_error(inp, "unrecognised opcode '%.*s'\n", opsize, opname);
+					asm_error(inp, "unrecognised opcode '%.*s'\n", (int)opsize, opname);
 		}
 	}
 }

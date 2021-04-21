@@ -35,6 +35,7 @@ extern uint16_t org, org_code, org_dsect, list_value;
 extern bool in_dsect, in_ds;
 extern struct dstring objcode;
 
+__attribute__((format (printf, 2, 3)))
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
 extern void asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);

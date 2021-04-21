@@ -250,7 +250,7 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 		asm_file(inp);
 	}
 	else
-		asm_error(inp, "unable to open chained file %s: %s", filename, strerror(errno));
+		asm_error(inp, "unable to open chained file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
 	free(filename.str);
 }
 
@@ -266,7 +266,7 @@ static void pseudo_include(struct inctx *inp, struct symbol *sym)
 		asm_file(&incfile);
 	}
 	else
-		asm_error(inp, "unable to open include file %s: %s", filename, strerror(errno));
+		asm_error(inp, "unable to open include file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
 	free(filename.str);
 }
 
@@ -282,7 +282,7 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 		if (fread(objcode.str, size, 1, fp) == 1)
 			objcode.used = size;
 		else
-			asm_error(inp, "read error on code file %s: %s", filename, strerror(errno));
+			asm_error(inp, "read error on code file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
 		fclose(fp);
 	}
 	free(filename.str);
