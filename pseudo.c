@@ -341,9 +341,11 @@ static void pseudo_macro(struct inctx *inp, struct symbol *sym)
 	if (macsym)
 		asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
 	else {
-		sym->scope = SCOPE_MACRO;
-		sym->macro = NULL;
 		macsym = sym;
+		if (!passno) {
+			sym->scope = SCOPE_MACRO;
+			sym->macro = NULL;
+		}
 	}
 }		
 

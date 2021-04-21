@@ -4,7 +4,8 @@
 #include <string.h>
 #include <search.h>
 
-static void *symbols = NULL;
+void *symbols = NULL;
+
 static unsigned sym_max = 0;
 static unsigned sym_count = 0;
 static unsigned sym_col, sym_cols;
@@ -51,7 +52,8 @@ struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size)
 	if (!cond_skipping) {
 		struct symbol *sym = malloc(sizeof(struct symbol) + label_size + 1);
 		if (sym) {
-			symbol_uppercase(inp->line.str, label_size, sym->name);
+			sym->name = sym->name_str;
+			symbol_uppercase(inp->line.str, label_size, sym->name_str);
 			struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
 			if (!res)
 				asm_error(inp, "out of memory allocating a symbol");
@@ -77,8 +79,9 @@ struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size)
 	if (!cond_skipping) {
 		char label[label_size+1];
 		symbol_uppercase(inp->line.str, label_size, label);
-		struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
-		void *node = tfind(sym, &symbols, symbol_cmp);
+		struct symbol sym;
+		sym.name = label;
+		void *node = tfind(&sym, &symbols, symbol_cmp);
 		if (node)
 			return *(struct symbol **)node;
 		else
@@ -94,8 +97,9 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 	size_t lab_size = inp->lineptr - lab_start;
 	char label[lab_size+1];
 	symbol_uppercase(lab_start, lab_size, label);
-	struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
-	void *node = tfind(sym, &symbols, symbol_cmp);
+	struct symbol sym;
+	sym.name = label;
+	void *node = tfind(&sym, &symbols, symbol_cmp);
 	if (node) {
 		struct symbol *sym = *(struct symbol **)node;
 		return sym->value;
@@ -110,11 +114,18 @@ static void print_one(const void *nodep, VISIT which, int depth)
 	if (which == leaf || which == postorder) {
 		const struct symbol *sym = *(const struct symbol **)nodep;
 		if (++sym_col == sym_cols) {
-			fprintf(list_fp, "%-*s &%04X\n", sym_max, sym->name, sym->value);
+			if (sym->scope == SCOPE_MACRO)
+				fprintf(list_fp, "%-*s MACRO\n", sym_max, sym->name);
+			else
+				fprintf(list_fp, "%-*s &%04X\n", sym_max, sym->name, (sym->value & 0xffff));
 			sym_col = 0;
 		}
-		else
-			fprintf(list_fp, "%-*s &%04X  ", sym_max, sym->name, sym->value);
+		else {
+			if (sym->scope == SCOPE_MACRO)
+				fprintf(list_fp, "%-*s MACRO  ", sym_max, sym->name);
+			else		
+				fprintf(list_fp, "%-*s &%04X  ", sym_max, sym->name, (sym->value & 0xffff));
+		}
 	}
 }
 

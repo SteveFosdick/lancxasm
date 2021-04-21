@@ -21,6 +21,7 @@ struct inctx {
 
 struct macline {
 	struct macline *next;
+	size_t length;
 	char text[1];
 };
 
@@ -28,12 +29,13 @@ struct macline {
 #define SCOPE_GLOBAL 1
 
 struct symbol {
+	unsigned scope;
+	char *name;
 	union {
 		int_least16_t value;
 		struct macline *macro;
 	};
-	unsigned scope;
-	char name[1];
+	char name_str[1];
 };
 
 /* lancxasm.c */
@@ -55,6 +57,7 @@ extern void asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);
 
 /* symbols.c */
+extern void *symbols;
 extern int (*symbol_cmp)(const void *, const void *);
 extern int symbol_cmp_ade(const void *a, const void *b);
 extern int symbol_parse(struct inctx *inp);
@@ -62,6 +65,7 @@ extern struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size);
 extern struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size);
 extern struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size);
 extern uint16_t symbol_lookup(struct inctx *inp, bool no_undef);
+extern struct symbol *symbol_macfind(char *opname);
 extern void symbol_print(void);
 
 /* expression.c */

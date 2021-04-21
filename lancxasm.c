@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "lancxasm.h"
 #include <errno.h>
+#include <search.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -88,52 +89,58 @@ static void list_extra(struct inctx *inp)
 
 static void list_line(struct inctx *inp)
 {
-	fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, list_value);
-	uint8_t *bytes = (uint8_t *)objcode.str;
-	switch(objcode.used) {
-		case 0:
-			fputs("        ", list_fp);
-			break;
-		case 1:
-			fprintf(list_fp, "%02X      ", bytes[0]);
-			break;
-		case 2:
-			fprintf(list_fp, "%02X %02X   ", bytes[0], bytes[1]);
-			break;
-		default:
-			fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
-			break;
-	}
-	if (*inp->line.str == '\n')
-		putc('\n', list_fp);
-	else {
-		putc(' ', list_fp);
-		unsigned col = 0;
-		const char *ptr = inp->line.str;
-		size_t remain = inp->line.used;
-		const char *tab = memchr(ptr, '\t', remain);
-		while (tab) {
-			size_t chars = tab - ptr;
-			fwrite(ptr, chars, 1, list_fp);
-			col += chars;
-			int spaces = 8 - (col % 8);
-			col += spaces;
-			while (spaces--)
-				putc(' ', list_fp);
-			ptr = tab + 1;
-			remain -= chars;
-			tab = memchr(ptr, '\t', remain);
+	if (passno && list_fp) {
+		fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, list_value);
+		uint8_t *bytes = (uint8_t *)objcode.str;
+		switch(objcode.used) {
+			case 0:
+				fputs("        ", list_fp);
+				break;
+			case 1:
+				fprintf(list_fp, "%02X      ", bytes[0]);
+				break;
+			case 2:
+				fprintf(list_fp, "%02X %02X   ", bytes[0], bytes[1]);
+				break;
+			default:
+				fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
+				break;
 		}
-		if (remain > 0)
-			fwrite(ptr, remain, 1, list_fp);
+		if (*inp->line.str == '\n')
+			putc('\n', list_fp);
+		else {
+			putc(' ', list_fp);
+			unsigned col = 0;
+			const char *ptr = inp->line.str;
+			size_t remain = inp->line.used;
+			const char *tab = memchr(ptr, '\t', remain);
+			while (tab) {
+				size_t chars = tab - ptr;
+				fwrite(ptr, chars, 1, list_fp);
+				col += chars;
+				int spaces = 8 - (col % 8);
+				col += spaces;
+				while (spaces--)
+					putc(' ', list_fp);
+				ptr = tab + 1;
+				remain -= chars + 1;
+				tab = memchr(ptr, '\t', remain);
+			}
+			if (remain > 0)
+				fwrite(ptr, remain, 1, list_fp);
+		}
+		if (err_message) {
+			fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
+			free(err_message);
+			err_message = NULL;
+		}
+		if (code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
+			list_extra(inp);
 	}
 	if (err_message) {
-		fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
 		free(err_message);
 		err_message = NULL;
 	}
-	if (code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
-		list_extra(inp);
 }
 
 static void asm_macdef(struct inctx *inp, int ch, size_t label_size)
@@ -141,51 +148,77 @@ static void asm_macdef(struct inctx *inp, int ch, size_t label_size)
 	/* defining a MACRO - check for the end marker */
 	const char *p = inp->lineptr;
 	if ((ch == 'E' || ch == 'e') && (p[1] == 'N' || p[1] == 'n') && (p[2] == 'D' || p[2] == 'd') && (p[3] == 'M' || p[3] == 'm')) {
-		printf("macro: end %s\n", p);
-		/* put the lines back in the right order */
-		struct macline *current = macsym->macro;
-		struct macline *prev = NULL, *after = NULL;
-		while (current != NULL) {
-			after = current->next;
-			current->next = prev;
-			prev = current;
-			current = after;
+		if (!passno) {
+			/* put the lines back in the right order */
+			struct macline *current = macsym->macro;
+			struct macline *prev = NULL, *after = NULL;
+			while (current != NULL) {
+				after = current->next;
+				current->next = prev;
+				prev = current;
+				current = after;
+			}
+			macsym->macro = prev;
 		}
-		macsym->macro = prev;
 		macsym = NULL; /* no longer defining */
 	}
-	else {
-		printf("macro: %.*s", (int)inp->line.used, inp->line.str);
+	else if (!passno) { /* macros only defined on pass one */
 		struct macline *ml = malloc(sizeof(struct macline) + inp->line.used);
 		if (ml) {
 			ml->next = macsym->macro;
 			macsym->macro = ml;
+			ml->length = inp->line.used;
 			memcpy(ml->text, inp->line.str, inp->line.used);
 		}
 		else
 			asm_error(inp, "out of memory defining macro %s", macsym->name);
+	}
+	list_line(inp);
+}
+
+static void asm_line(struct inctx *inp);
+
+static void asm_macexpand(struct inctx *inp, struct symbol *mac)
+{
+	if (mac->scope == SCOPE_MACRO) {
+		list_line(inp);
+		struct inctx mtx;
+		mtx.name = inp->name;
+		mtx.lineno = inp->lineno;
+		mtx.line.allocated = 0;
+		mtx.whence = 'M';
+		for (struct macline *ml = mac->macro; ml; ml = ml->next) {
+			mtx.line.str = mtx.lineptr = ml->text;
+			mtx.line.used = ml->length;
+			asm_line(&mtx);
+		}
+	}
+	else {
+		asm_error(inp, "%s is a value, not a MACRO", mac->name);
+		list_line(inp);
 	}
 }
 
 static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 {
 	struct symbol *sym = label_size ? symbol_enter(inp, label_size) : NULL;
-	if (!asm_isendchar(ch)) {
-		fwrite(inp->line.str, inp->line.used, 1, stdout);
+	if (asm_isendchar(ch))
+		list_line(inp);
+	else {
 		char *ptr = inp->lineptr;
 		do
 			ch = *++ptr;
 		while (!asm_isendchar(ch));
 		size_t opsize = ptr - inp->lineptr;
 		inp->lineptr = ptr;
-		char opname[opsize], *nptr = opname + opsize;
+		char opname[opsize+1], *nptr = opname + opsize;
+		*nptr = 0;
 		while (nptr > opname) {
 			ch = *--ptr;
 			if (ch >= 'a' && ch <= 'z')
 				ch &= 0xdf;
 			*--nptr = ch;
 		}
-		printf("label=%.*s, op=%.*s\n", (int)label_size, inp->line.str, (int)opsize, opname);		
 		if (!strncmp(opname, "IF", opsize)) {
 			if (cond_level == (sizeof(cond_stack)-1))
 				asm_error(inp, "Too many levels of IF");
@@ -194,26 +227,38 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 				if (!cond_skipping)
 					cond_skipping = !expression(inp, true);
 			}
+			list_line(inp);
 		}
 		else if (!strncmp(opname, "ELSE", opsize)) {
 			if (!cond_level)
 				asm_error(inp, "ELSE without IF");
 			else if (!cond_stack[cond_level-1])
 				cond_skipping = !cond_skipping;
+			list_line(inp);
 		}
 		else if (!strncmp(opname, "FI", opsize)) {
 			if (!cond_level)
 				asm_error(inp, "FI without IF");
 			else
 				cond_skipping = cond_stack[--cond_level];
+			list_line(inp);
 		}
-		else if (!cond_skipping) {
-			if (opsize != 3 || !m6502_op(inp, opname))
-				if (!pseudo_op(inp, opname, opsize, sym))
-					asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+		else if (cond_skipping || (opsize == 3 && m6502_op(inp, opname)) || pseudo_op(inp, opname, opsize, sym))
+			list_line(inp);
+		else {
+			struct symbol sym;
+			sym.name = opname;
+			struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
+			if (node)
+				asm_macexpand(inp, *node);
+			else {
+				asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+				list_line(inp);
+			}
 		}
 	}
 }
+
 static void asm_line(struct inctx *inp)
 {
 	list_value = org;
@@ -246,12 +291,6 @@ static void asm_line(struct inctx *inp)
 	else
 		asm_operation(inp, ch, label_size);
 
-	if (passno && list_fp)
-		list_line(inp);
-	else if (err_message) {
-		free(err_message);
-		err_message = NULL;
-	}
 	if (objcode.used) {
 		org += objcode.used;
 		if (passno && obj_fp)
