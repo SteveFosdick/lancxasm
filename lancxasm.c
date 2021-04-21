@@ -90,54 +90,56 @@ static void list_extra(struct inctx *inp)
 static void list_line(struct inctx *inp)
 {
 	if (passno && list_fp) {
-		fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, list_value);
-		uint8_t *bytes = (uint8_t *)objcode.str;
-		switch(objcode.used) {
-			case 0:
-				fputs("        ", list_fp);
-				break;
-			case 1:
-				fprintf(list_fp, "%02X      ", bytes[0]);
-				break;
-			case 2:
-				fprintf(list_fp, "%02X %02X   ", bytes[0], bytes[1]);
-				break;
-			default:
-				fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
-				break;
-		}
-		if (*inp->line.str == '\n')
-			putc('\n', list_fp);
-		else {
-			putc(' ', list_fp);
-			unsigned col = 0;
-			const char *ptr = inp->line.str;
-			size_t remain = inp->line.used;
-			const char *tab = memchr(ptr, '\t', remain);
-			while (tab) {
-				size_t chars = tab - ptr;
-				fwrite(ptr, chars, 1, list_fp);
-				col += chars;
-				int spaces = 8 - (col % 8);
-				col += spaces;
-				while (spaces--)
-					putc(' ', list_fp);
-				ptr = tab + 1;
-				remain -= chars + 1;
-				tab = memchr(ptr, '\t', remain);
+		if (src_list_level && (src_list_level >= 2 || inp->whence != 'M')) {
+			fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, list_value);
+			uint8_t *bytes = (uint8_t *)objcode.str;
+			switch(objcode.used) {
+				case 0:
+					fputs("        ", list_fp);
+					break;
+				case 1:
+					fprintf(list_fp, "%02X      ", bytes[0]);
+					break;
+				case 2:
+					fprintf(list_fp, "%02X %02X   ", bytes[0], bytes[1]);
+					break;
+				default:
+					fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
+					break;
 			}
-			if (remain > 0)
-				fwrite(ptr, remain, 1, list_fp);
+			if (*inp->line.str == '\n')
+				putc('\n', list_fp);
+			else {
+				putc(' ', list_fp);
+				unsigned col = 0;
+				const char *ptr = inp->line.str;
+				size_t remain = inp->line.used;
+				const char *tab = memchr(ptr, '\t', remain);
+				while (tab) {
+					size_t chars = tab - ptr;
+					fwrite(ptr, chars, 1, list_fp);
+					col += chars;
+					int spaces = 8 - (col % 8);
+					col += spaces;
+					while (spaces--)
+						putc(' ', list_fp);
+					ptr = tab + 1;
+					remain -= chars + 1;
+					tab = memchr(ptr, '\t', remain);
+				}
+				if (remain > 0)
+					fwrite(ptr, remain, 1, list_fp);
+			}
 		}
 		if (err_message) {
 			fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
 			free(err_message);
 			err_message = NULL;
 		}
-		if (code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
+		if (src_list_level && code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
 			list_extra(inp);
 	}
-	if (err_message) {
+	else if (err_message) {
 		free(err_message);
 		err_message = NULL;
 	}
@@ -398,7 +400,7 @@ int main(int argc, char **argv)
 						fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);
 						status = 5;
 					}
-					if (list_fp)
+					if (list_fp && src_list_level)
 						symbol_print();
 				}
 			}
