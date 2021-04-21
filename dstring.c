@@ -27,9 +27,13 @@ void dstr_grow(struct dstring *dstr, size_t bytes)
 	size_t reqd = dstr->used + bytes;
 	if (reqd > dstr->allocated) {
 		size_t grab = reqd;
-		if (reqd < 256)
-			for (grab = dstr->allocated; grab < reqd; grab <<= 1)
-				;
+		if (reqd < 256) {
+			grab = dstr->allocated;
+			if (!grab)
+				grab = 8;
+			while (grab < reqd)
+				grab <<= 1;
+		}
 		if (!(dstr->str = realloc(dstr->str, grab)))
 			dstr_nomem(grab);
 		dstr->allocated = grab;

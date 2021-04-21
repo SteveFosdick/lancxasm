@@ -9,7 +9,7 @@ static bool list_skip_cond = false;
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
 static unsigned err_count, err_column;
-static unsigned cond_level;
+static unsigned cond_level, mac_count;
 static uint8_t cond_stack[32];
 
 char *err_message = NULL;
@@ -178,22 +178,91 @@ static void asm_macdef(struct inctx *inp, int ch, size_t label_size)
 	list_line(inp);
 }
 
+static void asm_macparse(struct inctx *inp, char *params[10])
+{
+	int pno = 0, ch = non_space(inp);
+	params[pno] = inp->lineptr - 1;
+	while (!asm_isendchar(ch)) {
+		if (ch == ',') {
+			if (++pno == 9) {
+				asm_error(inp, "too many macro arguments");
+				break;
+			}
+			params[pno] = inp->lineptr;
+		}
+		ch = *++inp->lineptr;
+	}
+	while (pno < 9)
+		params[++pno] = inp->lineptr;
+}
+
 static void asm_line(struct inctx *inp);
+
+static void asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10], const char *at)
+{
+	const char *start = ml->text;
+	const char *end = start + ml->length;
+	mtx->line.used = 0;
+	do {
+		dstr_add_bytes(&mtx->line, start, at - start);
+		int digit = *++at;
+		if (digit == '0') {
+			char count[6];
+			size_t size = snprintf(count, sizeof(count), "%05d", mac_count);
+			dstr_add_bytes(&mtx->line, count, size);
+		}
+		else if (digit >= '1' && digit <= '9') {
+			digit -= '1';
+			char *argb = params[digit]+1;
+			char *arge = params[digit+1];
+			if (arge > argb)
+				dstr_add_bytes(&mtx->line, argb, arge - argb);
+		}
+		else
+			asm_error(mtx, "invalid macro parameter @%c", digit);
+		start = at + 1;
+		at = memchr(start, '@', end - start);
+	}
+	while (at);
+	if (start < end)
+		dstr_add_bytes(&mtx->line, start, end - start);
+	mtx->lineptr = mtx->line.str;
+	asm_line(mtx);
+}
 
 static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 {
 	if (mac->scope == SCOPE_MACRO) {
+		char *params[10];
+		++mac_count;
+		asm_macparse(inp, params);
 		list_line(inp);
+
+		/* Set up an input context for this macro */
 		struct inctx mtx;
 		mtx.name = inp->name;
 		mtx.lineno = inp->lineno;
+		mtx.line.str = NULL;
 		mtx.line.allocated = 0;
 		mtx.whence = 'M';
+
+		/* step through each line */
 		for (struct macline *ml = mac->macro; ml; ml = ml->next) {
-			mtx.line.str = mtx.lineptr = ml->text;
-			mtx.line.used = ml->length;
-			asm_line(&mtx);
+			/* does the line have args to be subsitited? */
+			const char *at = memchr(ml->text, '@', ml->length);
+			if (at)
+				asm_macsubst(&mtx, ml, params, at);
+			else {
+				/* no, avoid a copy */
+				char *save = mtx.line.str;
+				mtx.line.str = mtx.lineptr = ml->text;
+				mtx.line.used = ml->length;
+				asm_line(&mtx);
+				mtx.line.str = save;
+			}
 		}
+		if (mtx.line.allocated)
+			free(mtx.line.str);
 	}
 	else {
 		asm_error(inp, "%s is a value, not a MACRO", mac->name);
@@ -259,6 +328,7 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 			}
 		}
 	}
+	
 }
 
 static void asm_line(struct inctx *inp)
@@ -323,6 +393,7 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
     codefile = false;
     cond_skipping = false;
     cond_level = 0;
+    mac_count = 0;
 
     for (int argno = optind; argno < argc; argno++) {
 		const char *fn = argv[argno];
