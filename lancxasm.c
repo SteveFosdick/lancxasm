@@ -13,14 +13,10 @@ static unsigned cond_level, mac_count;
 static uint8_t cond_stack[32];
 
 char *err_message = NULL;
-FILE *list_fp = NULL;
-FILE *obj_fp = NULL;
-unsigned code_list_level = 1;
-unsigned src_list_level = 0;
-bool no_cmos = false;
-unsigned passno = 0;
+FILE *obj_fp = NULL, *list_fp = NULL;
+unsigned code_list_level = 1, src_list_level = 2, passno;
 uint16_t org, org_code, org_dsect, list_value;
-bool in_dsect, in_ds, codefile, cond_skipping;
+bool no_cmos = false, in_dsect, in_ds, codefile, cond_skipping;
 struct dstring objcode;
 struct symbol *macsym = NULL;
 
