@@ -117,14 +117,14 @@ static void print_one(const void *nodep, VISIT which, int depth)
 			if (sym->scope == SCOPE_MACRO)
 				fprintf(list_fp, "%-*s MACRO\n", sym_max, sym->name);
 			else
-				fprintf(list_fp, "%-*s &%04X\n", sym_max, sym->name, (sym->value & 0xffff));
+				fprintf(list_fp, "%-*s &%04X\n", sym_max, sym->name, sym->value);
 			sym_col = 0;
 		}
 		else {
 			if (sym->scope == SCOPE_MACRO)
 				fprintf(list_fp, "%-*s MACRO  ", sym_max, sym->name);
 			else		
-				fprintf(list_fp, "%-*s &%04X  ", sym_max, sym->name, (sym->value & 0xffff));
+				fprintf(list_fp, "%-*s &%04X  ", sym_max, sym->name, sym->value);
 		}
 	}
 }
