@@ -354,6 +354,16 @@ static void pseudo_endm(struct inctx *inp, struct symbol *sym)
 	asm_error(inp, "no macro is being defined");
 }
 
+static void pseudo_lfcond(struct inctx *inp, struct symbol *sym)
+{
+	list_skip_cond = false;
+}
+
+static void pseudo_sfcond(struct inctx *inp, struct symbol *sym)
+{
+	list_skip_cond = true;
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -379,10 +389,12 @@ static const struct op_type pseudo_ops[] = {
 	{ "EQU",     pseudo_equ     },
 	{ "HEX",     pseudo_hex     },
 	{ "INCLUDE", pseudo_include },
+	{ "LFCOND",  pseudo_lfcond  },
 	{ "LST",     pseudo_lst     },
 	{ "MACRO",   pseudo_macro   },
 	{ "ORG",     pseudo_org     },
 	{ "QUERY",   pseudo_query   },
+	{ "SFCOND",  pseudo_sfcond  },
 	{ "STR",     pseudo_str     }
 };
 

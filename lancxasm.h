@@ -43,7 +43,7 @@ extern char *err_message;
 extern FILE *obj_fp, *list_fp;
 extern unsigned code_list_level, src_list_level, passno;
 extern uint16_t org, org_code, org_dsect, list_value;
-extern bool no_cmos, in_dsect, in_ds, codefile, cond_skipping;
+extern bool no_cmos, list_skip_cond, in_dsect, in_ds, codefile, cond_skipping;
 extern struct dstring objcode;
 extern struct symbol *macsym;
 

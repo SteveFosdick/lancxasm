@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-static bool list_skip_cond = false;
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
 static unsigned err_count, err_column;
@@ -16,7 +15,7 @@ char *err_message = NULL;
 FILE *obj_fp = NULL, *list_fp = NULL;
 unsigned code_list_level = 1, src_list_level = 2, passno;
 uint16_t org, org_code, org_dsect, list_value;
-bool no_cmos = false, in_dsect, in_ds, codefile, cond_skipping;
+bool no_cmos = false, list_skip_cond = false, in_dsect, in_ds, codefile, cond_skipping;
 struct dstring objcode;
 struct symbol *macsym = NULL;
 
