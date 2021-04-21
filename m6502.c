@@ -215,35 +215,33 @@ static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 	}
 }
 
-bool m6502_op(struct inctx *inp)
+bool m6502_op(struct inctx *inp, const char *opname)
 {
-	if (opname.used == 3) {
-		const struct optab_ent *ptr = optab;
-		const struct optab_ent *end = optab + sizeof(optab) / sizeof(struct optab_ent);
-		while (ptr < end) {
-			if (!memcmp(opname.str, ptr->mnemonic, 3)) {
-				int ch = non_space(inp);
-				if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
-					m6502_implied(inp, ptr);
-				else if (ch == '#') {
-					++inp->lineptr;
-					m6502_two_byte(inp, ptr->imm, expression(inp, passno));
-				}
-				else if (ch == '(')
-					m6502_indirect(inp, ptr);
-				else if (ch == 'A' || ch == 'a') {
-					ch = inp->lineptr[1];
-					if (ch == ' ' || ch == '\t' || ch == ';' || ch == '\\' || ch == '*' || ch == '\n')
-						m6502_accumulator(inp, ptr);
-					else
-						m6502_others(inp, ptr);
-				}
+	const struct optab_ent *ptr = optab;
+	const struct optab_ent *end = optab + sizeof(optab) / sizeof(struct optab_ent);
+	while (ptr < end) {
+		if (!memcmp(opname, ptr->mnemonic, 3)) {
+			int ch = non_space(inp);
+			if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
+				m6502_implied(inp, ptr);
+			else if (ch == '#') {
+				++inp->lineptr;
+				m6502_two_byte(inp, ptr->imm, expression(inp, passno));
+			}
+			else if (ch == '(')
+				m6502_indirect(inp, ptr);
+			else if (ch == 'A' || ch == 'a') {
+				ch = inp->lineptr[1];
+				if (ch == ' ' || ch == '\t' || ch == ';' || ch == '\\' || ch == '*' || ch == '\n')
+					m6502_accumulator(inp, ptr);
 				else
 					m6502_others(inp, ptr);
-				return true;
 			}
-			++ptr;
+			else
+				m6502_others(inp, ptr);
+			return true;
 		}
+		++ptr;
 	}
 	return false;
 }

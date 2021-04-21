@@ -33,7 +33,7 @@ extern bool no_cmos;
 extern unsigned passno;
 extern uint16_t org, org_code, org_dsect, list_value;
 extern bool in_dsect, in_ds;
-extern struct dstring objcode, opname;
+extern struct dstring objcode;
 
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
 extern void asm_file(struct inctx *inp);
@@ -52,10 +52,10 @@ extern void symbol_print(void);
 extern int expression(struct inctx *inp, bool no_undef);
 
 /* m6502.c */
-extern bool m6502_op(struct inctx *inp);
+extern bool m6502_op(struct inctx *inp, const char *opname);
 
 /* pseudo.c */
-extern bool pseudo_op(struct inctx *inp, struct symbol *sym);
+extern bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym);
 
 #endif
 	

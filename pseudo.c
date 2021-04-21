@@ -317,12 +317,12 @@ static const struct op_type pseudo_ops[] = {
 	{ "STR",     pseudo_str     }
 };
 
-bool pseudo_op(struct inctx *inp, struct symbol *sym)
+bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym)
 {
 	const struct op_type *ptr = pseudo_ops;
 	const struct op_type *end = pseudo_ops + sizeof(pseudo_ops) / sizeof(struct op_type);
 	while (ptr < end) {
-		if (!strncmp(opname.str, ptr->name, opname.used)) {
+		if (!strncmp(opname, ptr->name, opsize)) {
 			ptr->func(inp, sym);
 			return true;
 		}

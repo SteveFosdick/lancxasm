@@ -21,7 +21,7 @@ bool no_cmos = false;
 unsigned passno = 0;
 uint16_t org, org_code, org_dsect, list_value;
 bool in_dsect, in_ds, codefile;
-struct dstring objcode, opname;
+struct dstring objcode;
 
 void asm_error(struct inctx *inp, const char *fmt, ...)
 {
@@ -48,14 +48,20 @@ static void asm_operation(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*') {
-		opname.used = 0;
-		while (ch != ' ' && ch != '\t' && ch != 0xdd && ch != '\n') {
+		char *ptr = inp->lineptr;
+		do
+			ch = *++ptr;
+		while (ch != ' ' && ch != '\t' && ch != 0xdd && ch != '\n');
+		size_t opsize = ptr - inp->lineptr;
+		inp->lineptr = ptr;
+		char opname[opsize], *nptr = opname + opsize;
+		while (nptr > opname) {
+			ch = *--ptr;
 			if (ch >= 'a' && ch <= 'z')
 				ch &= 0xdf;
-			dstr_add_ch(&opname, ch);
-			ch = *++inp->lineptr;
-		}
-		if (!strncmp(opname.str, "IF", opname.used)) {
+			*--nptr = ch;
+		}		
+		if (!strncmp(opname, "IF", opsize)) {
 			if (cond_level == (sizeof(cond_stack)-1))
 				asm_error(inp, "Too many levels of IF");
 			else {
@@ -64,20 +70,23 @@ static void asm_operation(struct inctx *inp, struct symbol *sym)
 					cond_skipping = !expression(inp, true);
 			}
 		}
-		else if (!strncmp(opname.str, "ELSE", opname.used)) {
+		else if (!strncmp(opname, "ELSE", opsize)) {
 			if (!cond_level)
 				asm_error(inp, "ELSE without IF");
 			else if (!cond_stack[cond_level-1])
 				cond_skipping = !cond_skipping;
 		}
-		else if (!strncmp(opname.str, "FI", opname.used)) {
+		else if (!strncmp(opname, "FI", opsize)) {
 			if (!cond_level)
 				asm_error(inp, "FI without IF");
 			else
 				cond_skipping = cond_stack[--cond_level];
 		}
-		else if (!cond_skipping && !m6502_op(inp) && !pseudo_op(inp, sym))
-			asm_error(inp, "unrecognised opcode '%.*s'\n", opname.used, opname.str);
+		else if (!cond_skipping) {
+			if (opsize != 3 || !m6502_op(inp, opname))
+				if (!pseudo_op(inp, opname, opsize, sym))
+					asm_error(inp, "unrecognised opcode '%.*s'\n", opname, opsize);
+		}
 	}
 }
 
@@ -259,7 +268,6 @@ int main(int argc, char **argv)
 		struct inctx infile;
 		dstr_empty(&infile.line, MIN_LINE);
 		dstr_empty(&objcode, MIN_LINE);
-		dstr_empty(&opname, 8);
 		if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
 			fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
 			status = 2;
