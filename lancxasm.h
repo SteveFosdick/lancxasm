@@ -25,6 +25,7 @@ struct symbol {
 };
 
 /* lancxasm.c */
+extern char *err_message;
 extern FILE *obj_fp;
 extern FILE *list_fp;
 extern unsigned code_list_level;

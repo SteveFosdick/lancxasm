@@ -8,11 +8,11 @@ static bool list_skip_cond = false;
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
 static unsigned err_count, err_column;
-static char *err_message = NULL;
 static bool cond_skipping;
 static unsigned cond_level;
 static uint8_t cond_stack[32];
 
+char *err_message = NULL;
 FILE *list_fp = NULL;
 FILE *obj_fp = NULL;
 unsigned code_list_level = 1;

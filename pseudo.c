@@ -288,6 +288,52 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 	free(filename.str);
 }
 
+static void pseudo_query(struct inctx *inp, struct symbol *sym)
+{
+	if (!passno && !err_message) {
+		int ch = non_space(inp) ;
+		if (ch != '\n') {
+			struct inctx qtx;
+			qtx.name = "query";
+			qtx.lineno = 0;
+			qtx.line.str = NULL;
+			qtx.line.allocated = 0;
+			char *out_end = inp->line.str + inp->line.used;
+			int c2 = *--out_end;
+			while (c2 == ' ' || c2 == '\t' || c2 == 0xdd || c2 == '\n')
+				c2 = *--out_end;
+			if ((ch == '"' || ch == '\'') && c2 == ch) {
+				++inp->lineptr;
+				--out_end;
+			}
+			size_t outsize = out_end - inp->lineptr + 1;
+			for (;;) {
+				fwrite(inp->lineptr, outsize, 1, stdout);
+				fputs("? ", stdout);
+				fflush(stdout);
+				ssize_t bytes = getline(&qtx.line.str, &qtx.line.allocated, stdin);
+				if (bytes >= 0) {
+					++qtx.lineno;
+					if (bytes > 0) {
+						qtx.line.used = bytes;
+						qtx.lineptr = qtx.line.str;
+						uint16_t value = expression(&qtx, true);
+						if (err_message) {
+							free(err_message);
+							err_message = NULL;
+						}
+						else {
+							sym->value = value;
+							list_value = value;
+							return;
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -314,6 +360,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "INCLUDE", pseudo_include },
 	{ "LST",     pseudo_lst     },
 	{ "ORG",     pseudo_org     },
+	{ "QUERY",   pseudo_query   },
 	{ "STR",     pseudo_str     }
 };
 
