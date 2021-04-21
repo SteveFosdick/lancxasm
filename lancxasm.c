@@ -85,9 +85,9 @@ static void list_extra(struct inctx *inp)
 
 static void list_line(struct inctx *inp)
 {
-	if (passno && list_fp) {
+	if (passno && list_fp && !(cond_skipping && list_skip_cond)) {
 		if (src_list_level && (src_list_level >= 2 || inp->whence != 'M')) {
-			fprintf(list_fp, "%c%5u %04X: ", inp->whence, inp->lineno, list_value);
+			fprintf(list_fp, "%c%5u %04X: ", cond_skipping ? 'S' : inp->whence, inp->lineno, list_value & 0xffff);
 			uint8_t *bytes = (uint8_t *)objcode.str;
 			switch(objcode.used) {
 				case 0:
@@ -127,17 +127,10 @@ static void list_line(struct inctx *inp)
 					fwrite(ptr, remain, 1, list_fp);
 			}
 		}
-		if (err_message) {
+		if (err_message)
 			fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
-			free(err_message);
-			err_message = NULL;
-		}
 		if (src_list_level && code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
 			list_extra(inp);
-	}
-	else if (err_message) {
-		free(err_message);
-		err_message = NULL;
 	}
 }
 
@@ -358,6 +351,11 @@ static void asm_line(struct inctx *inp)
 		asm_macdef(inp, ch, label_size);
 	else
 		asm_operation(inp, ch, label_size);
+
+	if (err_message) {
+		free(err_message);
+		err_message = NULL;
+	}
 
 	if (objcode.used) {
 		org += objcode.used;
