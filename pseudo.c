@@ -336,6 +336,22 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 	}
 }
 
+static void pseudo_macro(struct inctx *inp, struct symbol *sym)
+{
+	if (macsym)
+		asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
+	else {
+		sym->scope = SCOPE_MACRO;
+		sym->macro = NULL;
+		macsym = sym;
+	}
+}		
+
+static void pseudo_endm(struct inctx *inp, struct symbol *sym)
+{
+	asm_error(inp, "no macro is being defined");
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -357,10 +373,12 @@ static const struct op_type pseudo_ops[] = {
 	{ "DS",      pseudo_ds      },
 	{ "DW",      pseudo_dfw     },
 	{ "DFDB",    pseudo_dfdb    },
+	{ "ENDM",    pseudo_endm    },
 	{ "EQU",     pseudo_equ     },
 	{ "HEX",     pseudo_hex     },
 	{ "INCLUDE", pseudo_include },
 	{ "LST",     pseudo_lst     },
+	{ "MACRO",   pseudo_macro   },
 	{ "ORG",     pseudo_org     },
 	{ "QUERY",   pseudo_query   },
 	{ "STR",     pseudo_str     }

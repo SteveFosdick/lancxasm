@@ -19,8 +19,20 @@ struct inctx {
 	char whence;
 };
 
+struct macline {
+	struct macline *next;
+	char text[1];
+};
+
+#define SCOPE_MACRO  0
+#define SCOPE_GLOBAL 1
+
 struct symbol {
-	uint16_t value;
+	union {
+		int_least16_t value;
+		struct macline *macro;
+	};
+	unsigned scope;
 	char name[1];
 };
 
@@ -35,6 +47,7 @@ extern unsigned passno;
 extern uint16_t org, org_code, org_dsect, list_value;
 extern bool in_dsect, in_ds, codefile, cond_skipping;
 extern struct dstring objcode;
+extern struct symbol *macsym;
 
 __attribute__((format (printf, 2, 3)))
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
@@ -44,9 +57,10 @@ extern int non_space(struct inctx *inp);
 /* symbols.c */
 extern int (*symbol_cmp)(const void *, const void *);
 extern int symbol_cmp_ade(const void *a, const void *b);
-extern struct symbol *(*symbol_enter)(struct inctx *inp);
-extern struct symbol *symbol_enter_pass1(struct inctx *inp);
-extern struct symbol *symbol_enter_pass2(struct inctx *inp);
+extern int symbol_parse(struct inctx *inp);
+extern struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size);
+extern struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size);
+extern struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size);
 extern uint16_t symbol_lookup(struct inctx *inp, bool no_undef);
 extern void symbol_print(void);
 

@@ -21,6 +21,7 @@ unsigned passno = 0;
 uint16_t org, org_code, org_dsect, list_value;
 bool in_dsect, in_ds, codefile, cond_skipping;
 struct dstring objcode;
+struct symbol *macsym = NULL;
 
 void asm_error(struct inctx *inp, const char *fmt, ...)
 {
@@ -35,58 +36,27 @@ void asm_error(struct inctx *inp, const char *fmt, ...)
 	}
 }
 
+static inline bool asm_isspace(int ch)
+{
+	return ch == ' ' || ch == '\t' || ch == 0xdd;
+}
+
+static inline bool asm_iscomment(int ch)
+{
+	return ch == ';' || ch == '\\' || ch == '*';
+}
+
+static inline bool asm_isendchar(int ch)
+{
+	return ch == '\n' || asm_isspace(ch) || asm_iscomment(ch);
+}
+
 int non_space(struct inctx *inp)
 {
 	int ch = *inp->lineptr;
-	while (ch == ' ' || ch == '\t' || ch == 0xdd)
+	while (asm_isspace(ch))
 		ch = *++inp->lineptr;
 	return ch;
-}
-
-static void asm_operation(struct inctx *inp, struct symbol *sym)
-{
-	int ch = non_space(inp);
-	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*') {
-		char *ptr = inp->lineptr;
-		do
-			ch = *++ptr;
-		while (ch != ' ' && ch != '\t' && ch != 0xdd && ch != '\n');
-		size_t opsize = ptr - inp->lineptr;
-		inp->lineptr = ptr;
-		char opname[opsize], *nptr = opname + opsize;
-		while (nptr > opname) {
-			ch = *--ptr;
-			if (ch >= 'a' && ch <= 'z')
-				ch &= 0xdf;
-			*--nptr = ch;
-		}		
-		if (!strncmp(opname, "IF", opsize)) {
-			if (cond_level == (sizeof(cond_stack)-1))
-				asm_error(inp, "Too many levels of IF");
-			else {
-				cond_stack[cond_level++] = cond_skipping;
-				if (!cond_skipping)
-					cond_skipping = !expression(inp, true);
-			}
-		}
-		else if (!strncmp(opname, "ELSE", opsize)) {
-			if (!cond_level)
-				asm_error(inp, "ELSE without IF");
-			else if (!cond_stack[cond_level-1])
-				cond_skipping = !cond_skipping;
-		}
-		else if (!strncmp(opname, "FI", opsize)) {
-			if (!cond_level)
-				asm_error(inp, "FI without IF");
-			else
-				cond_skipping = cond_stack[--cond_level];
-		}
-		else if (!cond_skipping) {
-			if (opsize != 3 || !m6502_op(inp, opname))
-				if (!pseudo_op(inp, opname, opsize, sym))
-					asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
-		}
-	}
 }
 
 static void list_extra(struct inctx *inp)
@@ -166,18 +136,116 @@ static void list_line(struct inctx *inp)
 		list_extra(inp);
 }
 
+static void asm_macdef(struct inctx *inp, int ch, size_t label_size)
+{
+	/* defining a MACRO - check for the end marker */
+	const char *p = inp->lineptr;
+	if ((ch == 'E' || ch == 'e') && (p[1] == 'N' || p[1] == 'n') && (p[2] == 'D' || p[2] == 'd') && (p[3] == 'M' || p[3] == 'm')) {
+		printf("macro: end %s\n", p);
+		/* put the lines back in the right order */
+		struct macline *current = macsym->macro;
+		struct macline *prev = NULL, *after = NULL;
+		while (current != NULL) {
+			after = current->next;
+			current->next = prev;
+			prev = current;
+			current = after;
+		}
+		macsym->macro = prev;
+		macsym = NULL; /* no longer defining */
+	}
+	else {
+		printf("macro: %.*s", (int)inp->line.used, inp->line.str);
+		struct macline *ml = malloc(sizeof(struct macline) + inp->line.used);
+		if (ml) {
+			ml->next = macsym->macro;
+			macsym->macro = ml;
+			memcpy(ml->text, inp->line.str, inp->line.used);
+		}
+		else
+			asm_error(inp, "out of memory defining macro %s", macsym->name);
+	}
+}
+
+static void asm_operation(struct inctx *inp, int ch, size_t label_size)
+{
+	struct symbol *sym = label_size ? symbol_enter(inp, label_size) : NULL;
+	if (!asm_isendchar(ch)) {
+		fwrite(inp->line.str, inp->line.used, 1, stdout);
+		char *ptr = inp->lineptr;
+		do
+			ch = *++ptr;
+		while (!asm_isendchar(ch));
+		size_t opsize = ptr - inp->lineptr;
+		inp->lineptr = ptr;
+		char opname[opsize], *nptr = opname + opsize;
+		while (nptr > opname) {
+			ch = *--ptr;
+			if (ch >= 'a' && ch <= 'z')
+				ch &= 0xdf;
+			*--nptr = ch;
+		}
+		printf("label=%.*s, op=%.*s\n", (int)label_size, inp->line.str, (int)opsize, opname);		
+		if (!strncmp(opname, "IF", opsize)) {
+			if (cond_level == (sizeof(cond_stack)-1))
+				asm_error(inp, "Too many levels of IF");
+			else {
+				cond_stack[cond_level++] = cond_skipping;
+				if (!cond_skipping)
+					cond_skipping = !expression(inp, true);
+			}
+		}
+		else if (!strncmp(opname, "ELSE", opsize)) {
+			if (!cond_level)
+				asm_error(inp, "ELSE without IF");
+			else if (!cond_stack[cond_level-1])
+				cond_skipping = !cond_skipping;
+		}
+		else if (!strncmp(opname, "FI", opsize)) {
+			if (!cond_level)
+				asm_error(inp, "FI without IF");
+			else
+				cond_skipping = cond_stack[--cond_level];
+		}
+		else if (!cond_skipping) {
+			if (opsize != 3 || !m6502_op(inp, opname))
+				if (!pseudo_op(inp, opname, opsize, sym))
+					asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+		}
+	}
+}
 static void asm_line(struct inctx *inp)
 {
 	list_value = org;
+	size_t label_size = 0;
 	int ch = *inp->lineptr;
-	if (ch >= 'a' && ch <= 'z')
-		ch &= 0xdf;
-	if (ch >= 'A' && ch <= 'Z')
-		asm_operation(inp, symbol_enter(inp));
-	else if (ch == ' ' || ch == '\t' || ch == 0xdd)
-		asm_operation(inp, NULL);
-	else if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
-		asm_error(inp, "labels must start with a letter");
+	/* parse any label */
+	if (!asm_isspace(ch)) {
+		if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+			ch = symbol_parse(inp);
+			if (macsym)
+				while (ch == '@')
+					ch = symbol_parse(inp);
+			label_size = inp->lineptr - inp->line.str;
+			if (ch == ':')
+				++inp->lineptr;
+			else if (!asm_isendchar(ch)) {
+				asm_error(inp, "invalid character in label");
+				return;
+			}
+		}
+		else if (!asm_isendchar(ch)) {
+			asm_error(inp, "labels must start with a letter");
+			return;
+		}
+	}
+	ch = non_space(inp);
+
+	if (macsym)
+		asm_macdef(inp, ch, label_size);
+	else
+		asm_operation(inp, ch, label_size);
+
 	if (passno && list_fp)
 		list_line(inp);
 	else if (err_message) {

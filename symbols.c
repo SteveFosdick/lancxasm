@@ -24,24 +24,20 @@ int symbol_cmp_ade(const void *a, const void *b)
 }
 
 int (*symbol_cmp)(const void *, const void *) = symbol_cmp_lancs;
-struct symbol *(*symbol_enter)(struct inctx *inp);
+struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size);
 
-static int symbol_parse(struct inctx *inp)
+int symbol_parse(struct inctx *inp)
 {
 	int ch;
-
 	do
 		ch = *++inp->lineptr;
 	while ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '$' || ch == '_');
+	return ch;
+}	
 
-	if (ch == ' ' || ch == '\t' || ch == 0xdd || ch == '\n' || ch == ':')
-		return ch;
-	return 0;
-}
-
-static void symbol_uppercase(const char *src, const char *end, char *dest)
+static void symbol_uppercase(const char *src, size_t label_size, char *dest)
 {
-	while (src < end) {
+	while (label_size--) {
 		int ch = *src++;
 		if (ch >= 'a' && ch <= 'z')
 			ch &= 0xdf;
@@ -50,65 +46,44 @@ static void symbol_uppercase(const char *src, const char *end, char *dest)
 	*dest = 0;
 }
 
-struct symbol *symbol_enter_pass1(struct inctx *inp)
+struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size)
 {
-	const char *lab_start = inp->lineptr;
-	int tch = symbol_parse(inp);
-	if (tch) {
-		if (!cond_skipping) {
-			const char *lab_end = inp->lineptr;
-			size_t lab_size = lab_end - lab_start;
-			struct symbol *sym = malloc(sizeof(struct symbol) + lab_size + 1);
-			if (sym) {
-				symbol_uppercase(lab_start, lab_end, sym->name);
-				struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
-				if (!res)
-					asm_error(inp, "out of memory allocating a symbol");
-				else if (*res != sym) {
-					asm_error(inp, "symbol %s already defined", sym->name);
-					free(sym);
-				}
-				else {
-					sym->value = org;
-					++sym_count;
-					if (lab_size > sym_max)
-						sym_max = lab_size;
-					if (tch == ':')
-						++inp->lineptr;
-					return sym;
-				}
-			}
-			else
+	if (!cond_skipping) {
+		struct symbol *sym = malloc(sizeof(struct symbol) + label_size + 1);
+		if (sym) {
+			symbol_uppercase(inp->line.str, label_size, sym->name);
+			struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
+			if (!res)
 				asm_error(inp, "out of memory allocating a symbol");
+			else if (*res != sym) {
+				asm_error(inp, "symbol %s already defined", sym->name);
+				free(sym);
+			}
+			else {
+				sym->scope = SCOPE_GLOBAL;
+				sym->value = org;
+				++sym_count;
+				if (label_size > sym_max)
+					sym_max = label_size;
+				return sym;
+			}
 		}
 	}
-	else
-		asm_error(inp, "invalid character in label");
 	return NULL;
 }
 
-struct symbol *symbol_enter_pass2(struct inctx *inp)
+struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size)
 {
-	const char *lab_start = inp->lineptr;
-	int tch = symbol_parse(inp);
-	if (tch) {
-		if (!cond_skipping) {
-			const char *lab_end = inp->lineptr;
-			size_t lab_size = lab_end - lab_start;
-			char label[lab_size+1];
-			symbol_uppercase(lab_start, lab_end, label);
-			struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
-			void *node = tfind(sym, &symbols, symbol_cmp);
-			if (tch == ':')
-				++inp->lineptr;
-			if (node)
-				return *(struct symbol **)node;
-			else
-				asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
-		}
+	if (!cond_skipping) {
+		char label[label_size+1];
+		symbol_uppercase(inp->line.str, label_size, label);
+		struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
+		void *node = tfind(sym, &symbols, symbol_cmp);
+		if (node)
+			return *(struct symbol **)node;
+		else
+			asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
 	}
-	else
-		asm_error(inp, "invalid character in label");
 	return NULL;
 }
 
@@ -116,10 +91,9 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 {
 	const char *lab_start = inp->lineptr;
 	symbol_parse(inp);
-	const char *lab_end = inp->lineptr;
-	size_t lab_size = lab_end - lab_start;
+	size_t lab_size = inp->lineptr - lab_start;
 	char label[lab_size+1];
-	symbol_uppercase(lab_start, lab_end, label);
+	symbol_uppercase(lab_start, lab_size, label);
 	struct symbol *sym = (struct symbol *)(label - offsetof(struct symbol, name));
 	void *node = tfind(sym, &symbols, symbol_cmp);
 	if (node) {
