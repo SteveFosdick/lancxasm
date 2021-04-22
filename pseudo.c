@@ -398,6 +398,11 @@ static void pseudo_ttl(struct inctx *inp, struct symbol *sym)
 	dstr_add_bytes(&title, inp->lineptr, end - inp->lineptr);
 }
 
+static void pseudo_width(struct inctx *inp, struct symbol *sym)
+{
+	page_width = expression(inp, true);
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -432,7 +437,8 @@ static const struct op_type pseudo_ops[] = {
 	{ "SFCOND",  pseudo_sfcond  },
 	{ "SKP",     pseudo_skp     },
 	{ "STR",     pseudo_str     },
-	{ "TTL",     pseudo_ttl     }
+	{ "TTL",     pseudo_ttl     },
+	{ "WIDTH",   pseudo_width   }
 };
 
 bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym)
