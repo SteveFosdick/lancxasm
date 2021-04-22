@@ -32,7 +32,7 @@ struct symbol {
 	unsigned scope;
 	char *name;
 	union {
-		int_least16_t value;
+		uint16_t value;
 		struct macline *macro;
 	};
 	char name_str[1];
