@@ -4,8 +4,10 @@
 static int expr_term(struct inctx *inp, bool no_undef)
 {
     int value, ch = *inp->lineptr;
-    if (ch == '*')
+    if (ch == '*') {
 		value = org;
+		++inp->lineptr;
+	}
 	else if (ch == '\'' || ch == '"') {
         bool ctrl = false;
         bool topset = false;
