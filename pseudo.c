@@ -405,6 +405,27 @@ static void pseudo_width(struct inctx *inp, struct symbol *sym)
 	page_width = expression(inp, true);
 }
 
+static void pseudo_disp(struct inctx *inp, struct symbol *sym)
+{
+	const char *end = simple_str(inp, non_space(inp));
+	if (end > inp->lineptr) {
+		fwrite(inp->lineptr, end - inp->lineptr, 1, stdout);
+		putc('\n', stdout);
+	}
+}
+
+static void pseudo_disp1(struct inctx *inp, struct symbol *sym)
+{
+	if (!passno)
+		pseudo_disp(inp, sym);
+}
+
+static void pseudo_disp2(struct inctx *inp, struct symbol *sym)
+{
+	if (passno)
+		pseudo_disp(inp, sym);
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -422,6 +443,9 @@ static const struct op_type pseudo_ops[] = {
 	{ "DEND",    pseudo_dend    },
 	{ "DFB",     pseudo_dfb     },
 	{ "DFW",     pseudo_dfw     },
+	{ "DISP",    pseudo_disp    },
+	{ "DISP1",   pseudo_disp1   },
+	{ "DISP2",   pseudo_disp2   },
 	{ "DSECT",   pseudo_dsect   },
 	{ "DS",      pseudo_ds      },
 	{ "DW",      pseudo_dfw     },
@@ -430,6 +454,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "EQU",     pseudo_equ     },
 	{ "HEX",     pseudo_hex     },
 	{ "INCLUDE", pseudo_include },
+	{ "INFO",    pseudo_disp2   },
 	{ "LFCOND",  pseudo_lfcond  },
 	{ "LST",     pseudo_lst     },
 	{ "MACRO",   pseudo_macro   },
