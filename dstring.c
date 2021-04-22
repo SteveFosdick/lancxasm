@@ -30,7 +30,7 @@ void dstr_grow(struct dstring *dstr, size_t bytes)
 		if (reqd < 256) {
 			grab = dstr->allocated;
 			if (!grab)
-				grab = 8;
+				grab = MIN_SIZE;
 			while (grab < reqd)
 				grab <<= 1;
 		}

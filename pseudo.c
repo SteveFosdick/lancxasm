@@ -290,25 +290,31 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 	free(filename.str);
 }
 
+static const char *simple_str(struct inctx *inp, int ch)
+{
+	const char *end = inp->line.str + inp->line.used;
+	int c2 = *--end;
+	while (c2 == ' ' || c2 == '\t' || c2 == 0xdd || c2 == '\n')
+		c2 = *--end;
+	if ((ch == '"' || ch == '\'') && c2 == ch) {
+		++inp->lineptr;
+		return end;
+	}
+	return end + 1;
+}
+
 static void pseudo_query(struct inctx *inp, struct symbol *sym)
 {
 	if (!passno && !err_message) {
-		int ch = non_space(inp) ;
+		int ch = non_space(inp);
 		if (ch != '\n') {
 			struct inctx qtx;
 			qtx.name = "query";
 			qtx.lineno = 0;
 			qtx.line.str = NULL;
 			qtx.line.allocated = 0;
-			char *out_end = inp->line.str + inp->line.used;
-			int c2 = *--out_end;
-			while (c2 == ' ' || c2 == '\t' || c2 == 0xdd || c2 == '\n')
-				c2 = *--out_end;
-			if ((ch == '"' || ch == '\'') && c2 == ch) {
-				++inp->lineptr;
-				--out_end;
-			}
-			size_t outsize = out_end - inp->lineptr + 1;
+			const char *out_end = simple_str(inp, ch);
+			size_t outsize = out_end - inp->lineptr;
 			for (;;) {
 				fwrite(inp->lineptr, outsize, 1, stdout);
 				fputs("? ", stdout);
@@ -364,6 +370,34 @@ static void pseudo_sfcond(struct inctx *inp, struct symbol *sym)
 	list_skip_cond = true;
 }
 
+static void pseudo_page(struct inctx *inp, struct symbol *sym)
+{
+	page_len = expression(inp, true);
+	int ch = non_space(inp);
+	if (ch == ',') {
+		++inp->lineptr;
+		page_width = expression(inp, true);
+	}
+}
+
+static void pseudo_skp(struct inctx *inp, struct symbol *sym)
+{
+	if (page_len) {
+		int ch = non_space(inp);
+		if (ch == 'H' || ch == 'h')
+			cur_line = page_len;
+		else
+			cur_line += expression(inp, true);
+	}
+}
+
+static void pseudo_ttl(struct inctx *inp, struct symbol *sym)
+{
+	const char *end = simple_str(inp, non_space(inp));
+	title.used = 0;
+	dstr_add_bytes(&title, inp->lineptr, end - inp->lineptr);
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -393,9 +427,12 @@ static const struct op_type pseudo_ops[] = {
 	{ "LST",     pseudo_lst     },
 	{ "MACRO",   pseudo_macro   },
 	{ "ORG",     pseudo_org     },
+	{ "PAGE",    pseudo_page    },
 	{ "QUERY",   pseudo_query   },
 	{ "SFCOND",  pseudo_sfcond  },
-	{ "STR",     pseudo_str     }
+	{ "SKP",     pseudo_skp     },
+	{ "STR",     pseudo_str     },
+	{ "TTL",     pseudo_ttl     }
 };
 
 bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym)

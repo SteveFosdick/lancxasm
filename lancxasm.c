@@ -7,16 +7,16 @@
 
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
-static unsigned err_count, err_column;
-static unsigned cond_level, mac_count;
+static unsigned err_count, err_column, cond_level, mac_count;
 static uint8_t cond_stack[32];
 
 char *err_message = NULL;
 FILE *obj_fp = NULL, *list_fp = NULL;
 unsigned code_list_level = 1, src_list_level = 2, passno;
+unsigned page_len = 0, page_width = 132, cur_page, cur_line;
 uint16_t org, org_code, org_dsect, list_value;
 bool no_cmos = false, list_skip_cond = false, in_dsect, in_ds, codefile, cond_skipping;
-struct dstring objcode;
+struct dstring objcode, title;
 struct symbol *macsym = NULL;
 
 void asm_error(struct inctx *inp, const char *fmt, ...)
@@ -55,18 +55,47 @@ int non_space(struct inctx *inp)
 	return ch;
 }
 
+static const char page_hdr[] = "Lancaster/ADE cross-assembler  ";
+
+static void list_header(struct inctx *inp)
+{
+	fwrite(page_hdr, sizeof(page_hdr)-1, 1, list_fp);
+	if (title.used)
+		fwrite(title.str, title.used, 1, list_fp);
+	char pageno[14];
+	int size = snprintf(pageno, sizeof(pageno), "Page: %u", ++cur_page);
+	int spaces = page_width - sizeof(page_hdr) - title.used - size;
+	while (spaces-- > 0)
+		putc(' ', list_fp);
+	fwrite(pageno, size, 1, list_fp);
+	fprintf(list_fp, "\nFile: %s\n\n", inp->name);
+	cur_line = 3;
+}
+
+static void list_pagecheck(struct inctx *inp)
+{
+	if (cur_line++ == 0 && page_len)
+		list_header(inp);
+	else if (page_len && cur_line >= page_len) {
+		putc('\f', list_fp);
+		list_header(inp);
+	}
+}
+
 static void list_extra(struct inctx *inp)
 {
 	unsigned togo = objcode.used - 3;
 	unsigned addr = org + 3;
 	uint8_t *bytes = (uint8_t *)objcode.str + 3;
 	while (togo >= 3) {
+		list_pagecheck(inp);
 		fprintf(list_fp, "%c      %04X: %02X %02X %02X\n", inp->whence, addr, bytes[0], bytes[1], bytes[2]);
 		togo -= 3;
 		addr += 3;
 		bytes += 3;
 	}
 	if (togo > 0) {
+		list_pagecheck(inp);
 		fprintf(list_fp, "%c      %04X: ", inp->whence, addr);
 		switch(togo) {
 			case 1:
@@ -86,6 +115,7 @@ static void list_line(struct inctx *inp)
 {
 	if (passno && list_fp && !(cond_skipping && list_skip_cond)) {
 		if (src_list_level && (src_list_level >= 2 || inp->whence != 'M')) {
+			list_pagecheck(inp);
 			fprintf(list_fp, "%c%5u %04X: ", cond_skipping ? 'S' : inp->whence, inp->lineno, list_value & 0xffff);
 			uint8_t *bytes = (uint8_t *)objcode.str;
 			switch(objcode.used) {
@@ -126,8 +156,10 @@ static void list_line(struct inctx *inp)
 					fwrite(ptr, remain, 1, list_fp);
 			}
 		}
-		if (err_message)
+		if (err_message) {
+			list_pagecheck(inp);
 			fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
+		}
 		if (src_list_level && code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
 			list_extra(inp);
 	}
@@ -409,7 +441,7 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
 int main(int argc, char **argv)
 {
     int opt, status = 0;
-    while ((opt = getopt(argc, argv, "ac:f:l:o:rs")) != -1) {
+    while ((opt = getopt(argc, argv, "ac:f:l:o:p:rsw:")) != -1) {
         switch(opt) {
             case 'a':
                 symbol_cmp = symbol_cmp_ade;
@@ -426,12 +458,18 @@ int main(int argc, char **argv)
             case 'o':
                 obj_filename = optarg;
                 break;
+            case 'p':
+				page_len = atoi(optarg);
+				break;
             case 'r':
                 no_cmos = true;
                 break;
             case 's':
                 list_skip_cond = true;
                 break;
+            case 'w':
+				page_width = atoi(optarg);
+				break;
             default:
                 status = 1;
         }

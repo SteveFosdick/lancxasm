@@ -136,7 +136,7 @@ void symbol_print(void)
 		fputs("\nNo symbols defined\n", list_fp);
 	else {
 		fprintf(list_fp, "\n%d symbols defined\n\n", sym_count);
-		sym_cols = MIN_LINE / (sym_max + 8);
+		sym_cols = page_width / (sym_max + 8);
 		sym_col = 0;
 		twalk(symbols, print_one);
 		if (sym_col)
