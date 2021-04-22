@@ -446,7 +446,7 @@ bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symb
 	const struct op_type *ptr = pseudo_ops;
 	const struct op_type *end = pseudo_ops + sizeof(pseudo_ops) / sizeof(struct op_type);
 	while (ptr < end) {
-		if (!strncmp(opname, ptr->name, opsize)) {
+		if (!strcmp(opname, ptr->name)) {
 			ptr->func(inp, sym);
 			return true;
 		}
