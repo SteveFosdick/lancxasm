@@ -393,7 +393,7 @@ static void asm_line(struct inctx *inp)
 
 	if (objcode.used) {
 		org += objcode.used;
-		if (passno && obj_fp)
+		if (passno && obj_fp && !in_dsect)
 			fwrite(objcode.str, objcode.used, 1, obj_fp);
 		objcode.used = 0;
 	}
