@@ -247,11 +247,11 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 		fclose(inp->fp);
 		inp->fp = fp;
 		inp->name = filename.str;
-		asm_file(inp);
 	}
-	else
+	else {
 		asm_error(inp, "unable to open chained file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
-	free(filename.str);
+		free(filename.str);
+	}
 }
 
 static void pseudo_include(struct inctx *inp, struct symbol *sym)

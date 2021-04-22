@@ -260,6 +260,7 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 
 		/* Set up an input context for this macro */
 		struct inctx mtx;
+		mtx.fp = inp->fp;
 		mtx.name = inp->name;
 		mtx.lineno = inp->lineno;
 		mtx.line.str = NULL;
@@ -281,6 +282,8 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 				mtx.line.str = save;
 			}
 		}
+		inp->fp = mtx.fp;
+		inp->name = mtx.name;
 		if (mtx.line.allocated)
 			free(mtx.line.str);
 	}
