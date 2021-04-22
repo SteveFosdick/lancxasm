@@ -346,13 +346,15 @@ static void pseudo_macro(struct inctx *inp, struct symbol *sym)
 {
 	if (macsym)
 		asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
-	else {
+	else if (sym) {
 		macsym = sym;
 		if (!passno) {
 			sym->scope = SCOPE_MACRO;
 			sym->macro = NULL;
 		}
 	}
+	else
+		asm_error(inp, "a MACRO must have a label (name)");
 }		
 
 static void pseudo_endm(struct inctx *inp, struct symbol *sym)
