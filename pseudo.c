@@ -426,6 +426,29 @@ static void pseudo_disp2(struct inctx *inp, struct symbol *sym)
 		pseudo_disp(inp, sym);
 }
 
+static void pseudo_tabs(struct inctx *inp, struct symbol *sym)
+{
+	int ch = non_space(inp);
+	if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
+		memcpy(tab_stops, default_tabs, sizeof(tab_stops));
+	else {
+		int tab;
+		for (tab = 0; tab < MAX_TAB_STOPS; ) {
+			tab_stops[tab++] = expression(inp, true);
+			ch = *inp->lineptr;
+			if (ch != ',')
+				break;
+			++inp->lineptr;
+		}
+		if (ch == ',')
+			asm_error(inp, "too many tab stops");
+		else {
+			while (tab < MAX_TAB_STOPS)
+				tab_stops[tab++] = 0;
+		}
+	}
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -464,6 +487,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "SFCOND",  pseudo_sfcond  },
 	{ "SKP",     pseudo_skp     },
 	{ "STR",     pseudo_str     },
+	{ "TABS",    pseudo_tabs    },
 	{ "TTL",     pseudo_ttl     },
 	{ "WIDTH",   pseudo_width   }
 };

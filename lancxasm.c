@@ -13,7 +13,8 @@ static uint8_t cond_stack[32];
 char *err_message = NULL;
 FILE *obj_fp = NULL, *list_fp = NULL;
 unsigned code_list_level = 1, src_list_level = 2, passno;
-unsigned page_len = 0, page_width = 132, cur_page, cur_line;
+unsigned page_len = 0, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
+const unsigned default_tabs[MAX_TAB_STOPS] = { 8, 16, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 115, 123 };
 uint16_t org, org_code, org_dsect, list_value;
 bool no_cmos = false, list_skip_cond = false, in_dsect, in_ds, codefile, cond_skipping;
 struct dstring objcode, title;
@@ -136,21 +137,42 @@ static void list_line(struct inctx *inp)
 				putc('\n', list_fp);
 			else {
 				putc(' ', list_fp);
-				unsigned col = 0;
+				unsigned col = 1;
 				const char *ptr = inp->line.str;
 				size_t remain = inp->line.used;
 				const char *tab = memchr(ptr, '\t', remain);
-				while (tab) {
-					size_t chars = tab - ptr;
-					fwrite(ptr, chars, 1, list_fp);
-					col += chars;
-					int spaces = 8 - (col % 8);
-					col += spaces;
-					while (spaces--)
-						putc(' ', list_fp);
-					ptr = tab + 1;
-					remain -= chars + 1;
-					tab = memchr(ptr, '\t', remain);
+				if (tab) {
+					int tab_no = 0;
+					do {
+						size_t chars = tab - ptr;
+						fwrite(ptr, chars, 1, list_fp);
+						col += chars;
+						unsigned tab_posn = 0;
+						while (tab_no < MAX_TAB_STOPS) {
+							tab_posn = tab_stops[tab_no];
+							if (tab_posn > col || tab_posn == 0)
+								break;
+							printf("skipping tab %d at %u\n", tab_no, tab_stops[tab_no]);
+							++tab_no;
+						}
+						if (tab_posn == 0) {
+							printf("final tab %d, out of tab stops, using one space\n", tab_no);
+							putc(' ', list_fp);
+							col++;
+						}
+						else {
+							printf("final tab %d, at %d\n", tab_no, tab_posn);
+							while (col < tab_posn) {
+								putc(' ', list_fp);
+								++col;
+							}
+							++tab_no;
+						}
+						ptr = tab + 1;
+						remain -= chars + 1;
+						tab = memchr(ptr, '\t', remain);
+					}
+					while (tab);
 				}
 				if (remain > 0)
 					fwrite(ptr, remain, 1, list_fp);
@@ -491,6 +513,7 @@ int main(int argc, char **argv)
 				status = 3;
 			}
 			else {
+				memcpy(tab_stops, default_tabs, sizeof(tab_stops));
 				symbol_enter = symbol_enter_pass1;
 				asm_pass(argc, argv, &infile);
 				if (err_count) {

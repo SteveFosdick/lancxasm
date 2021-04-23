@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #define MIN_LINE 132
+#define MAX_TAB_STOPS 14
 
 struct inctx {
 	FILE *fp;
@@ -42,7 +43,8 @@ struct symbol {
 extern char *err_message;
 extern FILE *obj_fp, *list_fp;
 extern unsigned code_list_level, src_list_level, passno;
-extern unsigned page_len, page_width, cur_page, cur_line;
+extern unsigned page_len, page_width, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
+extern const unsigned default_tabs[MAX_TAB_STOPS];
 extern uint16_t org, org_code, org_dsect, list_value;
 extern bool no_cmos, list_skip_cond, in_dsect, in_ds, codefile, cond_skipping;
 extern struct dstring objcode, title;
