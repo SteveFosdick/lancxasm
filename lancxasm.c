@@ -152,16 +152,13 @@ static void list_line(struct inctx *inp)
 							tab_posn = tab_stops[tab_no];
 							if (tab_posn > col || tab_posn == 0)
 								break;
-							printf("skipping tab %d at %u\n", tab_no, tab_stops[tab_no]);
 							++tab_no;
 						}
 						if (tab_posn == 0) {
-							printf("final tab %d, out of tab stops, using one space\n", tab_no);
 							putc(' ', list_fp);
 							col++;
 						}
 						else {
-							printf("final tab %d, at %d\n", tab_no, tab_posn);
 							while (col < tab_posn) {
 								putc(' ', list_fp);
 								++col;
