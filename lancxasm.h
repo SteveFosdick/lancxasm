@@ -45,7 +45,7 @@ extern FILE *obj_fp, *list_fp;
 extern unsigned code_list_level, src_list_level, passno;
 extern unsigned page_len, page_width, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 extern const unsigned default_tabs[MAX_TAB_STOPS];
-extern uint16_t org, org_code, org_dsect, list_value;
+extern uint16_t org, org_code, org_dsect, list_value, load_addr, exec_addr, addr_msw;
 extern bool no_cmos, list_skip_cond, in_dsect, in_ds, codefile, cond_skipping;
 extern struct dstring objcode, title;
 extern struct symbol *macsym;

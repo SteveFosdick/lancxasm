@@ -449,6 +449,24 @@ static void pseudo_tabs(struct inctx *inp, struct symbol *sym)
 	}
 }
 
+static void pseudo_load(struct inctx *inp, struct symbol *sym)
+{
+	if (passno)
+		load_addr = expression(inp, true);
+}
+
+static void pseudo_exec(struct inctx *inp, struct symbol *sym)
+{
+	if (passno)
+		exec_addr = expression(inp, true);
+}
+
+static void pseudo_msw(struct inctx *inp, struct symbol *sym)
+{
+	if (passno)
+		addr_msw = expression(inp, true);
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -475,12 +493,15 @@ static const struct op_type pseudo_ops[] = {
 	{ "DFDB",    pseudo_dfdb    },
 	{ "ENDM",    pseudo_endm    },
 	{ "EQU",     pseudo_equ     },
+	{ "EXEC",    pseudo_exec    },
 	{ "HEX",     pseudo_hex     },
 	{ "INCLUDE", pseudo_include },
 	{ "INFO",    pseudo_disp2   },
 	{ "LFCOND",  pseudo_lfcond  },
+	{ "LOAD",    pseudo_load    },
 	{ "LST",     pseudo_lst     },
 	{ "MACRO",   pseudo_macro   },
+	{ "MSW",     pseudo_msw     },
 	{ "ORG",     pseudo_org     },
 	{ "PAGE",    pseudo_page    },
 	{ "QUERY",   pseudo_query   },

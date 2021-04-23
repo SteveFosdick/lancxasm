@@ -15,7 +15,7 @@ FILE *obj_fp = NULL, *list_fp = NULL;
 unsigned code_list_level = 1, src_list_level = 2, passno;
 unsigned page_len = 0, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 const unsigned default_tabs[MAX_TAB_STOPS] = { 8, 16, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 115, 123 };
-uint16_t org, org_code, org_dsect, list_value;
+uint16_t org, org_code, org_dsect, list_value, load_addr = 0, exec_addr = 0, addr_msw = 0;
 bool no_cmos = false, list_skip_cond = false, in_dsect, in_ds, codefile, cond_skipping;
 struct dstring objcode, title;
 struct symbol *macsym = NULL;
@@ -460,6 +460,9 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
 	}
 }
 
+static const char hst_chars[] = "#$%&.?@^";
+static const char bbc_chars[] = "?<;+/#=>";
+
 int main(int argc, char **argv)
 {
     int opt, status = 0;
@@ -506,7 +509,7 @@ int main(int argc, char **argv)
 		}
 		else {
 			if (obj_filename && (obj_fp = fopen(obj_filename, "wb")) == NULL) {
-				fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
+				fprintf(stderr, "lancxasm: unable to open object code file '%s': %s\n", list_filename, strerror(errno));
 				status = 3;
 			}
 			else {
@@ -534,6 +537,32 @@ int main(int argc, char **argv)
 		}
 		if (list_fp)
 			fclose(list_fp);
+
+		if (obj_filename && status == 0) {
+			if (load_addr || exec_addr) {
+				struct dstring inf_file;
+				dstr_empty(&inf_file, 0);
+				dstr_add_str(&inf_file, obj_filename);
+				dstr_add_bytes(&inf_file, ".inf", 5);
+				FILE *inf_fp = fopen(inf_file.str, "w");
+				if (inf_fp) {
+					uint32_t msw = addr_msw << 16;
+					int ch;
+					while ((ch = *obj_filename++)) {
+						const char *ptr = strchr(hst_chars, ch);
+						if (ptr)
+							ch = bbc_chars[ptr - hst_chars];
+						putc(ch, inf_fp);
+					}
+					fprintf(inf_fp, " %08X %08X\n", msw|load_addr, msw|exec_addr);
+					fclose(inf_fp);
+				}
+				else {
+					fprintf(stderr, "lancxasm: unable to open INF file '%s': %s\n", inf_file.str, strerror(errno));
+					status = 6;
+				}
+			}
+		}
 	}
     else
         fputs("Usage: lancxasm [ -a ] [ -c level ] [ -f list-file ] [ -l level ] [ -o obj-file ] [ -r ] [ -s ] <file> [ ... ]\n", stderr);
