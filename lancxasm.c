@@ -308,7 +308,7 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 		char *ptr = inp->lineptr;
 		do
 			ch = *++ptr;
-		while (!asm_isendchar(ch));
+		while (!asm_isspace(ch) && !asm_isendchar(ch));
 		size_t opsize = ptr - inp->lineptr;
 		inp->lineptr = ptr;
 		char opname[opsize+1], *nptr = opname + opsize;
@@ -375,12 +375,12 @@ static void asm_line(struct inctx *inp)
 			label_size = inp->lineptr - inp->line.str;
 			if (ch == ':')
 				++inp->lineptr;
-			else if (!asm_isendchar(ch)) {
+			else if (!asm_isspace(ch) && !asm_isendchar(ch)) {
 				asm_error(inp, "invalid character in label");
 				return;
 			}
 		}
-		else if (!asm_isendchar(ch)) {
+		else if (!asm_isspace(ch) && !asm_isendchar(ch)) {
 			asm_error(inp, "labels must start with a letter");
 			return;
 		}
@@ -415,9 +415,11 @@ void asm_file(struct inctx *inp)
 	int ch = getc(inp->fp);
 	if (ch != EOF) {
 		do {
-			dstr_add_ch(&inp->line, ch);
-			if (ch == '\r' || ch == '\n')
+			if (ch == '\r' || ch == '\n') {
+				dstr_add_ch(&inp->line, '\n');
 				break;
+			}
+			dstr_add_ch(&inp->line, ch);
 			ch = getc(inp->fp);
 		} while (ch != EOF);
 
