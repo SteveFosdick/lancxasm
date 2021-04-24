@@ -33,20 +33,7 @@ void asm_error(struct inctx *inp, const char *fmt, ...)
 	}
 }
 
-static inline bool asm_isspace(int ch)
-{
-	return ch == ' ' || ch == '\t' || ch == 0xdd;
-}
-
-static inline bool asm_iscomment(int ch)
-{
-	return ch == ';' || ch == '\\' || ch == '*';
-}
-
-static inline bool asm_isendchar(int ch)
-{
-	return ch == '\n' || asm_isspace(ch) || asm_iscomment(ch);
-}
+#include "charclass.h"
 
 int non_space(struct inctx *inp)
 {
@@ -420,13 +407,30 @@ static void asm_line(struct inctx *inp)
 
 void asm_file(struct inctx *inp)
 {
-	inp->lineno = 0;
-	ssize_t bytes;
-	while ((bytes = getline(&inp->line.str, &inp->line.allocated, inp->fp)) >= 0) {
-		++inp->lineno;
-		inp->line.used = bytes;
+	inp->lineno = 1;
+	inp->line.used = 0;
+	/* Read the first line one character at a time to detect the
+	 * line ending in use.
+	 */
+	int ch = getc(inp->fp);
+	if (ch != EOF) {
+		do {
+			dstr_add_ch(&inp->line, ch);
+			if (ch == '\r' || ch == '\n')
+				break;
+			ch = getc(inp->fp);
+		} while (ch != EOF);
+
 		inp->lineptr = inp->line.str;
 		asm_line(inp);
+		if (ch != EOF) {
+			/* Switch to line at a time with new delimiter */
+			while (dstr_getdelim(&inp->line, ch, inp->fp) >= 0) {
+				++inp->lineno;
+				inp->lineptr = inp->line.str;
+				asm_line(inp);
+			}
+		}
 	}
 	fclose(inp->fp);
 }

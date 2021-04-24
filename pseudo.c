@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "charclass.h"
+
 static void pseudo_equ(struct inctx *inp, struct symbol *sym)
 {
 	if (sym) {
@@ -179,7 +181,7 @@ static void pseudo_hex(struct inctx *inp, struct symbol *sym)
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
 		int endq = ch;
-		while ((ch = *++inp->lineptr) != endq || ch == '\n') {
+		while ((ch = *++inp->lineptr) != endq && ch != '\n') {
 			unsigned byte = hex_nyb(inp, ch);
 			ch = *++inp->lineptr;
 			if (ch == endq || ch == '\n') {
@@ -294,7 +296,7 @@ static const char *simple_str(struct inctx *inp, int ch)
 {
 	const char *end = inp->line.str + inp->line.used;
 	int c2 = *--end;
-	while (c2 == ' ' || c2 == '\t' || c2 == 0xdd || c2 == '\n')
+	while (asm_isspace(ch) || ch == '\n')
 		c2 = *--end;
 	if ((ch == '"' || ch == '\'') && c2 == ch) {
 		++inp->lineptr;
@@ -319,11 +321,10 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 				fwrite(inp->lineptr, outsize, 1, stdout);
 				fputs("? ", stdout);
 				fflush(stdout);
-				ssize_t bytes = getline(&qtx.line.str, &qtx.line.allocated, stdin);
+				ssize_t bytes = dstr_getdelim(&qtx.line, '\n', stdin);
 				if (bytes >= 0) {
 					++qtx.lineno;
 					if (bytes > 0) {
-						qtx.line.used = bytes;
 						qtx.lineptr = qtx.line.str;
 						uint16_t value = expression(&qtx, true);
 						if (err_message) {
@@ -338,6 +339,8 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 					}
 				}
 			}
+			if (qtx.line.allocated)
+				free(qtx.line.str);
 		}
 	}
 }
