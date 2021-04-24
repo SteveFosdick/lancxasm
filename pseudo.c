@@ -345,21 +345,6 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 	}
 }
 
-static void pseudo_macro(struct inctx *inp, struct symbol *sym)
-{
-	if (macsym)
-		asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
-	else if (sym) {
-		macsym = sym;
-		if (!passno) {
-			sym->scope = SCOPE_MACRO;
-			sym->macro = NULL;
-		}
-	}
-	else
-		asm_error(inp, "a MACRO must have a label (name)");
-}		
-
 static void pseudo_endm(struct inctx *inp, struct symbol *sym)
 {
 	asm_error(inp, "no macro is being defined");
@@ -503,7 +488,6 @@ static const struct op_type pseudo_ops[] = {
 	{ "LFCOND",  pseudo_lfcond  },
 	{ "LOAD",    pseudo_load    },
 	{ "LST",     pseudo_lst     },
-	{ "MACRO",   pseudo_macro   },
 	{ "MSW",     pseudo_msw     },
 	{ "ORG",     pseudo_org     },
 	{ "PAGE",    pseudo_page    },

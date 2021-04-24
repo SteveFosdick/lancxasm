@@ -301,7 +301,6 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 
 static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 {
-	struct symbol *sym = label_size ? symbol_enter(inp, label_size) : NULL;
 	if (asm_isendchar(ch))
 		list_line(inp);
 	else {
@@ -319,45 +318,65 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 				ch &= 0xdf;
 			*--nptr = ch;
 		}
-		if (!strncmp(opname, "IF", opsize)) {
-			if (cond_level == (sizeof(cond_stack)-1))
-				asm_error(inp, "Too many levels of IF");
-			else {
-				cond_stack[cond_level++] = cond_skipping;
-				if (!cond_skipping)
-					cond_skipping = !expression(inp, true);
+		if (!cond_skipping && !strncmp(opname, "MACRO", opsize)) {
+			if (macsym)
+				asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
+			else if (label_size) {
+				struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO);
+				if (sym) {
+					macsym = sym;
+					if (!passno)
+						sym->macro = NULL;
+				}
 			}
-			list_line(inp);
-		}
-		else if (!strncmp(opname, "ELSE", opsize)) {
-			if (!cond_level)
-				asm_error(inp, "ELSE without IF");
-			else if (!cond_stack[cond_level-1])
-				cond_skipping = !cond_skipping;
-			list_line(inp);
-		}
-		else if (!strncmp(opname, "FI", opsize)) {
-			if (!cond_level)
-				asm_error(inp, "FI without IF");
 			else
-				cond_skipping = cond_stack[--cond_level];
+				asm_error(inp, "a MACRO must have a label (name)");
 			list_line(inp);
 		}
-		else if (cond_skipping || (opsize == 3 && m6502_op(inp, opname)) || pseudo_op(inp, opname, opsize, sym))
-			list_line(inp);
 		else {
-			struct symbol sym;
-			sym.name = opname;
-			struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
-			if (node)
-				asm_macexpand(inp, *node);
-			else {
-				asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+			struct symbol *sym = NULL;
+			if (!cond_skipping && label_size && (sym = symbol_enter(inp, label_size, SCOPE_GLOBAL)) && !passno)
+				sym->value = org;
+			if (!strncmp(opname, "IF", opsize)) {
+				if (cond_level == (sizeof(cond_stack)-1))
+					asm_error(inp, "Too many levels of IF");
+				else {
+					cond_stack[cond_level++] = cond_skipping;
+					if (!cond_skipping)
+						cond_skipping = !expression(inp, true);
+				}
 				list_line(inp);
+			}
+			else if (!strncmp(opname, "ELSE", opsize)) {
+				if (!cond_level)
+					asm_error(inp, "ELSE without IF");
+				else if (!cond_stack[cond_level-1])
+					cond_skipping = !cond_skipping;
+				list_line(inp);
+			}
+			else if (!strncmp(opname, "FI", opsize)) {
+				if (!cond_level)
+					asm_error(inp, "FI without IF");
+				else
+					cond_skipping = cond_stack[--cond_level];
+				list_line(inp);
+			}
+			else if (cond_skipping || (opsize == 3 && m6502_op(inp, opname)) || pseudo_op(inp, opname, opsize, sym))
+				list_line(inp);
+			else {
+				struct symbol sym;
+				sym.scope = SCOPE_MACRO;
+				sym.name = opname;
+				struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
+				if (node)
+					asm_macexpand(inp, *node);
+				else {
+					asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+					list_line(inp);
+				}
 			}
 		}
 	}
-	
 }
 
 static void asm_line(struct inctx *inp)

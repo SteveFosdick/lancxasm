@@ -14,18 +14,24 @@ static int symbol_cmp_lancs(const void *a, const void *b)
 {
 	const struct symbol *sa = a;
 	const struct symbol *sb = b;
-	return strcmp(sa->name, sb->name);
+	int res = strcmp(sa->name, sb->name);
+	if (!res)
+		res = sa->scope - sb->scope;
+	return res;
 }
 
 int symbol_cmp_ade(const void *a, const void *b)
 {
 	const struct symbol *sa = a;
 	const struct symbol *sb = b;
-	return strncmp(sa->name, sb->name, 6);
+	int res = strncmp(sa->name, sb->name, 6);
+	if (!res)
+		res = sa->scope - sb->scope;
+	return res;
 }
 
 int (*symbol_cmp)(const void *, const void *) = symbol_cmp_lancs;
-struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size);
+struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size, int scope);
 
 int symbol_parse(struct inctx *inp)
 {
@@ -47,46 +53,42 @@ static void symbol_uppercase(const char *src, size_t label_size, char *dest)
 	*dest = 0;
 }
 
-struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size)
+struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scope)
 {
-	if (!cond_skipping) {
-		struct symbol *sym = malloc(sizeof(struct symbol) + label_size + 1);
-		if (sym) {
-			sym->name = sym->name_str;
-			symbol_uppercase(inp->line.str, label_size, sym->name_str);
-			struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
-			if (!res)
-				asm_error(inp, "out of memory allocating a symbol");
-			else if (*res != sym) {
-				asm_error(inp, "symbol %s already defined", sym->name);
-				free(sym);
-			}
-			else {
-				sym->scope = SCOPE_GLOBAL;
-				sym->value = org;
-				++sym_count;
-				if (label_size > sym_max)
-					sym_max = label_size;
-				return sym;
-			}
+	struct symbol *sym = malloc(sizeof(struct symbol) + label_size + 1);
+	if (sym) {
+		sym->scope = scope;
+		sym->name = sym->name_str;
+		symbol_uppercase(inp->line.str, label_size, sym->name_str);
+		struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
+		if (!res)
+			asm_error(inp, "out of memory allocating a symbol");
+		else if (*res != sym) {
+			asm_error(inp, "symbol %s already defined", sym->name);
+			free(sym);
+		}
+		else {
+			++sym_count;
+			if (label_size > sym_max)
+				sym_max = label_size;
+			return sym;
 		}
 	}
 	return NULL;
 }
 
-struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size)
+struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, int scope)
 {
-	if (!cond_skipping) {
-		char label[label_size+1];
-		symbol_uppercase(inp->line.str, label_size, label);
-		struct symbol sym;
-		sym.name = label;
-		void *node = tfind(&sym, &symbols, symbol_cmp);
-		if (node)
-			return *(struct symbol **)node;
-		else
-			asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
-	}
+	char label[label_size+1];
+	symbol_uppercase(inp->line.str, label_size, label);
+	struct symbol sym;
+	sym.scope = scope;
+	sym.name = label;
+	void *node = tfind(&sym, &symbols, symbol_cmp);
+	if (node)
+		return *(struct symbol **)node;
+	else
+		asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
 	return NULL;
 }
 
@@ -98,6 +100,7 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 	char label[lab_size+1];
 	symbol_uppercase(lab_start, lab_size, label);
 	struct symbol sym;
+	sym.scope = SCOPE_GLOBAL;
 	sym.name = label;
 	void *node = tfind(&sym, &symbols, symbol_cmp);
 	if (node) {
@@ -123,7 +126,7 @@ static void print_one(const void *nodep, VISIT which, int depth)
 		else {
 			if (sym->scope == SCOPE_MACRO)
 				fprintf(list_fp, "%-*s MACRO  ", sym_max, sym->name);
-			else		
+			else
 				fprintf(list_fp, "%-*s &%04X  ", sym_max, sym->name, sym->value);
 		}
 	}
@@ -143,4 +146,3 @@ void symbol_print(void)
 			putc('\n', list_fp);
 	}
 }
-
