@@ -120,8 +120,8 @@ static void list_line(struct inctx *inp)
 					fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
 					break;
 			}
-			if (asm_iseol(*inp->line.str))
-				putc(*inp->line.str, list_fp);
+			if (*inp->line.str == '\n')
+				putc('\n', list_fp);
 			else {
 				putc(' ', list_fp);
 				unsigned col = 1;
@@ -308,7 +308,7 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 		char *ptr = inp->lineptr;
 		do
 			ch = *++ptr;
-		while (!asm_isspace(ch) && !asm_isendchar(ch));
+		while (!asm_isendchar(ch));
 		size_t opsize = ptr - inp->lineptr;
 		inp->lineptr = ptr;
 		char opname[opsize+1], *nptr = opname + opsize;
@@ -375,7 +375,7 @@ static void asm_line(struct inctx *inp)
 			label_size = inp->lineptr - inp->line.str;
 			if (ch == ':')
 				++inp->lineptr;
-			else if (!asm_isspace(ch) && !asm_isendchar(ch)) {
+			else if (!asm_isendchar(ch)) {
 				asm_error(inp, "invalid character in label");
 				return;
 			}
@@ -416,22 +416,17 @@ void asm_file(struct inctx *inp)
 	if (ch != EOF) {
 		do {
 			dstr_add_ch(&inp->line, ch);
-			if (asm_iseol(ch))
+			if (ch == '\r' || ch == '\n')
 				break;
 			ch = getc(inp->fp);
 		} while (ch != EOF);
 
 		inp->lineptr = inp->line.str;
 		asm_line(inp);
-		
-		/* Now switch to reading a line at a time using the newly
-		 * discovered line terminator.
-		 */
 		if (ch != EOF) {
-			ssize_t bytes;
-			while ((bytes = getdelim(&inp->line.str, &inp->line.allocated, ch, inp->fp)) >= 0) {
+			/* Switch to line at a time with new delimiter */
+			while (dstr_getdelim(&inp->line, ch, inp->fp) >= 0) {
 				++inp->lineno;
-				inp->line.used = bytes;
 				inp->lineptr = inp->line.str;
 				asm_line(inp);
 			}

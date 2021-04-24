@@ -26,7 +26,7 @@ static void pseudo_asc(struct inctx *inp, struct symbol *sym)
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
 		int endq = ch;
-		while ((ch = *++inp->lineptr) != endq && !asm_iseol(ch)) {
+		while ((ch = *++inp->lineptr) != endq && ch != '\n') {
 			if (ch == '|' || ch == '^') {
 				int ch2 = *++inp->lineptr;
 				if (ch2 == endq) {
@@ -123,7 +123,7 @@ static void plant_data(struct inctx *inp, const char *desc, void (*planter)(stru
 		plant_item(inp, non_space(inp), planter);
 		ch = *inp->lineptr++;
 	} while (ch == ',');
-	if (!asm_isendchar(ch))
+	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
 		asm_error(inp, "bad %s expression", desc);
 }	
 
@@ -160,7 +160,7 @@ static void pseudo_data(struct inctx *inp, struct symbol *sym)
 			plant_item(inp, ch, plant_bytes);
 		ch = *inp->lineptr++;
 	} while (ch == ',');
-	if (!asm_isendchar(ch))
+	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
 		asm_error(inp, "bad %s expression", "data");
 }	
 
@@ -181,10 +181,10 @@ static void pseudo_hex(struct inctx *inp, struct symbol *sym)
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
 		int endq = ch;
-		while ((ch = *++inp->lineptr) != endq || asm_iseol(ch)) {
+		while ((ch = *++inp->lineptr) != endq && ch != '\n') {
 			unsigned byte = hex_nyb(inp, ch);
 			ch = *++inp->lineptr;
-			if (ch == endq || asm_iseol(ch)) {
+			if (ch == endq || ch == '\n') {
 				plant_bytes(inp, 1, byte << 4);
 				break;
 			}
@@ -233,7 +233,7 @@ static FILE *parse_open(struct inctx *inp, struct dstring *fn, const char *mode)
 {
 	dstr_empty(fn, 20);
 	int ch = non_space(inp);
-	while (!asm_isspace(ch) && !asm_isendchar(ch)) {
+	while (ch != '\n' && ch != ' ' && ch != '\t' && ch != 0xdd) {
 		dstr_add_ch(fn, ch);
 		ch = *++inp->lineptr;
 	}
@@ -296,7 +296,7 @@ static const char *simple_str(struct inctx *inp, int ch)
 {
 	const char *end = inp->line.str + inp->line.used;
 	int c2 = *--end;
-	while (asm_isspace(ch) || asm_iseol(ch))
+	while (asm_isspace(ch) || ch == '\n')
 		c2 = *--end;
 	if ((ch == '"' || ch == '\'') && c2 == ch) {
 		++inp->lineptr;
@@ -309,7 +309,7 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 {
 	if (!passno && !err_message) {
 		int ch = non_space(inp);
-		if (!asm_iseol(ch)) {
+		if (ch != '\n') {
 			struct inctx qtx;
 			qtx.name = "query";
 			qtx.lineno = 0;
@@ -321,11 +321,10 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 				fwrite(inp->lineptr, outsize, 1, stdout);
 				fputs("? ", stdout);
 				fflush(stdout);
-				ssize_t bytes = getline(&qtx.line.str, &qtx.line.allocated, stdin);
+				ssize_t bytes = dstr_getdelim(&qtx.line, '\n', stdin);
 				if (bytes >= 0) {
 					++qtx.lineno;
 					if (bytes > 0) {
-						qtx.line.used = bytes;
 						qtx.lineptr = qtx.line.str;
 						uint16_t value = expression(&qtx, true);
 						if (err_message) {
@@ -340,6 +339,8 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 					}
 				}
 			}
+			if (qtx.line.allocated)
+				free(qtx.line.str);
 		}
 	}
 }
@@ -431,7 +432,7 @@ static void pseudo_disp2(struct inctx *inp, struct symbol *sym)
 static void pseudo_tabs(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
-	if (asm_isendchar(ch))
+	if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
 		memcpy(tab_stops, default_tabs, sizeof(tab_stops));
 	else {
 		int tab;

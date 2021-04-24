@@ -9,6 +9,6 @@ expression.o: lancxasm.h dstring.h expression.c
 
 pseudo.o: lancxasm.h dstring.h charclass.h pseudo.c
 
-m6502.o: lancxasm.h dstring.h charclass.h m6502.c
+m6502.o: lancxasm.h dstring.h m6502.c
 
 symbols.o: lancxasm.h dstring.h symbols.c
