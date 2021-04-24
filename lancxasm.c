@@ -12,7 +12,7 @@ static uint8_t cond_stack[32];
 
 char *err_message = NULL;
 FILE *obj_fp = NULL, *list_fp = NULL;
-unsigned code_list_level = 1, src_list_level = 2, passno;
+unsigned code_list_level = 1, src_list_level = 2, passno, scope_no;
 unsigned page_len = 0, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 const unsigned default_tabs[MAX_TAB_STOPS] = { 8, 16, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 115, 123 };
 uint16_t org, org_code, org_dsect, list_value, load_addr = 0, exec_addr = 0, addr_msw = 0;
@@ -322,11 +322,15 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 			if (macsym)
 				asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
 			else if (label_size) {
-				struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO);
-				if (sym) {
-					macsym = sym;
-					if (!passno)
-						sym->macro = NULL;
+				if (*inp->lineptr == ':')
+					asm_error(inp, "local scope MACROs not supported");
+				else {
+					struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO);
+					if (sym) {
+						macsym = sym;
+						if (!passno)
+							sym->macro = NULL;
+					}
 				}
 			}
 			else
@@ -335,8 +339,11 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 		}
 		else {
 			struct symbol *sym = NULL;
-			if (!cond_skipping && label_size && (sym = symbol_enter(inp, label_size, SCOPE_GLOBAL)) && !passno)
-				sym->value = org;
+			if (!cond_skipping && label_size) {
+				int scope = *inp->line.str == ':' ? scope_no : SCOPE_GLOBAL;
+				if ((sym = symbol_enter(inp, label_size, scope)) && !passno)
+					sym->value = org;
+			}
 			if (!strncmp(opname, "IF", opsize)) {
 				if (cond_level == (sizeof(cond_stack)-1))
 					asm_error(inp, "Too many levels of IF");
@@ -386,7 +393,7 @@ static void asm_line(struct inctx *inp)
 	int ch = *inp->lineptr;
 	/* parse any label */
 	if (!asm_isspace(ch)) {
-		if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+		if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == ':') {
 			ch = symbol_parse(inp);
 			if (macsym)
 				while (ch == '@')
@@ -466,6 +473,7 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
     cond_skipping = false;
     cond_level = 0;
     mac_count = 0;
+    scope_no = SCOPE_LOCAL;
 
     for (int argno = optind; argno < argc; argno++) {
 		const char *fn = argv[argno];

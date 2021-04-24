@@ -479,6 +479,11 @@ static void pseudo_msw(struct inctx *inp, struct symbol *sym)
 		addr_msw = expression(inp, true);
 }
 
+static void pseudo_block(struct inctx *inp, struct symbol *sym)
+{
+	++scope_no;
+}
+
 struct op_type {
 	char name[8];
 	void (*func)(struct inctx *inp, struct symbol *sym);
@@ -486,6 +491,7 @@ struct op_type {
 
 static const struct op_type pseudo_ops[] = {
 	{ "ASC",     pseudo_asc     },
+	{ "BLOCK",   pseudo_block   },
 	{ "CASC",    pseudo_casc    },
 	{ "CHN",     pseudo_chn     },
 	{ "CLST",    pseudo_clst    },

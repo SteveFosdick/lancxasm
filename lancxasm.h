@@ -28,6 +28,7 @@ struct macline {
 
 #define SCOPE_MACRO  0
 #define SCOPE_GLOBAL 1
+#define SCOPE_LOCAL  2
 
 struct symbol {
 	int  scope;
@@ -42,7 +43,7 @@ struct symbol {
 /* lancxasm.c */
 extern char *err_message;
 extern FILE *obj_fp, *list_fp;
-extern unsigned code_list_level, src_list_level, passno;
+extern unsigned code_list_level, src_list_level, passno, scope_no;
 extern unsigned page_len, page_width, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 extern const unsigned default_tabs[MAX_TAB_STOPS];
 extern uint16_t org, org_code, org_dsect, list_value, load_addr, exec_addr, addr_msw;

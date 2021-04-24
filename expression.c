@@ -41,7 +41,7 @@ static int expr_term(struct inctx *inp, bool no_undef)
         value = strtoul(inp->lineptr + 1, &inp->lineptr, 16);
     else if (ch >= '0' && ch <= '9')
         value = strtoul(inp->lineptr, &inp->lineptr, 10);
-    else if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'))
+    else if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == ':')
 		value = symbol_lookup(inp, no_undef);
 	else {
 		asm_error(inp, "invalid expression");

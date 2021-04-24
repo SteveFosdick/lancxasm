@@ -100,7 +100,7 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 	char label[lab_size+1];
 	symbol_uppercase(lab_start, lab_size, label);
 	struct symbol sym;
-	sym.scope = SCOPE_GLOBAL;
+	sym.scope = *lab_start == ':' ? scope_no : SCOPE_GLOBAL;
 	sym.name = label;
 	void *node = tfind(&sym, &symbols, symbol_cmp);
 	if (node) {
