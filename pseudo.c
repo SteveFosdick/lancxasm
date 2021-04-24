@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "charclass.h"
+
 static void pseudo_equ(struct inctx *inp, struct symbol *sym)
 {
 	if (sym) {
@@ -24,7 +26,7 @@ static void pseudo_asc(struct inctx *inp, struct symbol *sym)
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
 		int endq = ch;
-		while ((ch = *++inp->lineptr) != endq && ch != '\n') {
+		while ((ch = *++inp->lineptr) != endq && !asm_iseol(ch)) {
 			if (ch == '|' || ch == '^') {
 				int ch2 = *++inp->lineptr;
 				if (ch2 == endq) {
@@ -121,7 +123,7 @@ static void plant_data(struct inctx *inp, const char *desc, void (*planter)(stru
 		plant_item(inp, non_space(inp), planter);
 		ch = *inp->lineptr++;
 	} while (ch == ',');
-	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
+	if (!asm_isendchar(ch))
 		asm_error(inp, "bad %s expression", desc);
 }	
 
@@ -158,7 +160,7 @@ static void pseudo_data(struct inctx *inp, struct symbol *sym)
 			plant_item(inp, ch, plant_bytes);
 		ch = *inp->lineptr++;
 	} while (ch == ',');
-	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
+	if (!asm_isendchar(ch))
 		asm_error(inp, "bad %s expression", "data");
 }	
 
@@ -179,10 +181,10 @@ static void pseudo_hex(struct inctx *inp, struct symbol *sym)
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
 		int endq = ch;
-		while ((ch = *++inp->lineptr) != endq || ch == '\n') {
+		while ((ch = *++inp->lineptr) != endq || asm_iseol(ch)) {
 			unsigned byte = hex_nyb(inp, ch);
 			ch = *++inp->lineptr;
-			if (ch == endq || ch == '\n') {
+			if (ch == endq || asm_iseol(ch)) {
 				plant_bytes(inp, 1, byte << 4);
 				break;
 			}
@@ -231,7 +233,7 @@ static FILE *parse_open(struct inctx *inp, struct dstring *fn, const char *mode)
 {
 	dstr_empty(fn, 20);
 	int ch = non_space(inp);
-	while (ch != '\n' && ch != ' ' && ch != '\t' && ch != 0xdd) {
+	while (!asm_isspace(ch) && !asm_isendchar(ch)) {
 		dstr_add_ch(fn, ch);
 		ch = *++inp->lineptr;
 	}
@@ -294,7 +296,7 @@ static const char *simple_str(struct inctx *inp, int ch)
 {
 	const char *end = inp->line.str + inp->line.used;
 	int c2 = *--end;
-	while (c2 == ' ' || c2 == '\t' || c2 == 0xdd || c2 == '\n')
+	while (asm_isspace(ch) || asm_iseol(ch))
 		c2 = *--end;
 	if ((ch == '"' || ch == '\'') && c2 == ch) {
 		++inp->lineptr;
@@ -307,7 +309,7 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 {
 	if (!passno && !err_message) {
 		int ch = non_space(inp);
-		if (ch != '\n') {
+		if (!asm_iseol(ch)) {
 			struct inctx qtx;
 			qtx.name = "query";
 			qtx.lineno = 0;
@@ -429,7 +431,7 @@ static void pseudo_disp2(struct inctx *inp, struct symbol *sym)
 static void pseudo_tabs(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
-	if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
+	if (asm_isendchar(ch))
 		memcpy(tab_stops, default_tabs, sizeof(tab_stops));
 	else {
 		int tab;

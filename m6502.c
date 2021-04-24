@@ -215,6 +215,8 @@ static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 	}
 }
 
+#include "charclass.h"
+
 bool m6502_op(struct inctx *inp, const char *opname)
 {
 	const struct optab_ent *ptr = optab;
@@ -222,7 +224,7 @@ bool m6502_op(struct inctx *inp, const char *opname)
 	while (ptr < end) {
 		if (!memcmp(opname, ptr->mnemonic, 3)) {
 			int ch = non_space(inp);
-			if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
+			if (asm_isendchar(ch))
 				m6502_implied(inp, ptr);
 			else if (ch == '#') {
 				++inp->lineptr;
@@ -232,7 +234,7 @@ bool m6502_op(struct inctx *inp, const char *opname)
 				m6502_indirect(inp, ptr);
 			else if (ch == 'A' || ch == 'a') {
 				ch = inp->lineptr[1];
-				if (ch == ' ' || ch == '\t' || ch == ';' || ch == '\\' || ch == '*' || ch == '\n')
+				if (asm_isspace(ch) || asm_isendchar(ch))
 					m6502_accumulator(inp, ptr);
 				else
 					m6502_others(inp, ptr);

@@ -33,20 +33,7 @@ void asm_error(struct inctx *inp, const char *fmt, ...)
 	}
 }
 
-static inline bool asm_isspace(int ch)
-{
-	return ch == ' ' || ch == '\t' || ch == 0xdd;
-}
-
-static inline bool asm_iscomment(int ch)
-{
-	return ch == ';' || ch == '\\' || ch == '*';
-}
-
-static inline bool asm_isendchar(int ch)
-{
-	return ch == '\n' || asm_isspace(ch) || asm_iscomment(ch);
-}
+#include "charclass.h"
 
 int non_space(struct inctx *inp)
 {
@@ -133,8 +120,8 @@ static void list_line(struct inctx *inp)
 					fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
 					break;
 			}
-			if (*inp->line.str == '\n')
-				putc('\n', list_fp);
+			if (asm_iseol(*inp->line.str))
+				putc(*inp->line.str, list_fp);
 			else {
 				putc(' ', list_fp);
 				unsigned col = 1;
@@ -321,7 +308,7 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 		char *ptr = inp->lineptr;
 		do
 			ch = *++ptr;
-		while (!asm_isendchar(ch));
+		while (!asm_isspace(ch) && !asm_isendchar(ch));
 		size_t opsize = ptr - inp->lineptr;
 		inp->lineptr = ptr;
 		char opname[opsize+1], *nptr = opname + opsize;
@@ -388,7 +375,7 @@ static void asm_line(struct inctx *inp)
 			label_size = inp->lineptr - inp->line.str;
 			if (ch == ':')
 				++inp->lineptr;
-			else if (!asm_isendchar(ch)) {
+			else if (!asm_isspace(ch) && !asm_isendchar(ch)) {
 				asm_error(inp, "invalid character in label");
 				return;
 			}
@@ -420,13 +407,35 @@ static void asm_line(struct inctx *inp)
 
 void asm_file(struct inctx *inp)
 {
-	inp->lineno = 0;
-	ssize_t bytes;
-	while ((bytes = getline(&inp->line.str, &inp->line.allocated, inp->fp)) >= 0) {
-		++inp->lineno;
-		inp->line.used = bytes;
+	inp->lineno = 1;
+	inp->line.used = 0;
+	/* Read the first line one character at a time to detect the
+	 * line ending in use.
+	 */
+	int ch = getc(inp->fp);
+	if (ch != EOF) {
+		do {
+			dstr_add_ch(&inp->line, ch);
+			if (asm_iseol(ch))
+				break;
+			ch = getc(inp->fp);
+		} while (ch != EOF);
+
 		inp->lineptr = inp->line.str;
 		asm_line(inp);
+		
+		/* Now switch to reading a line at a time using the newly
+		 * discovered line terminator.
+		 */
+		if (ch != EOF) {
+			ssize_t bytes;
+			while ((bytes = getdelim(&inp->line.str, &inp->line.allocated, ch, inp->fp)) >= 0) {
+				++inp->lineno;
+				inp->line.used = bytes;
+				inp->lineptr = inp->line.str;
+				asm_line(inp);
+			}
+		}
 	}
 	fclose(inp->fp);
 }
