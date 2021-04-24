@@ -296,7 +296,7 @@ static const char *simple_str(struct inctx *inp, int ch)
 {
 	const char *end = inp->line.str + inp->line.used;
 	int c2 = *--end;
-	while (asm_isspace(ch) || ch == '\n')
+	while (asm_isspace(c2) || c2 == '\n')
 		c2 = *--end;
 	if ((ch == '"' || ch == '\'') && c2 == ch) {
 		++inp->lineptr;
