@@ -397,7 +397,31 @@ static void pseudo_disp(struct inctx *inp, struct symbol *sym)
 {
 	const char *end = simple_str(inp, non_space(inp));
 	if (end > inp->lineptr) {
-		fwrite(inp->lineptr, end - inp->lineptr, 1, stdout);
+		const char *start = inp->lineptr;
+		char *perc;
+		while ((perc = memchr(start, '%', end - start)) && (end - perc) >= 4) {
+			fwrite(start, perc - start, 1, stdout);
+			const char *fmt;
+			if ((perc[1] == 'D' || perc[1] == 'd') && perc[2] == '(')
+				fmt = "%d";
+			else if ((perc[1] == 'X' || perc[1] == 'x') && perc[2] == '(')
+				fmt = "%x";
+			else {
+				putc('%', stdout);
+				start = perc + 1;
+				continue;
+			}
+			inp->lineptr = perc + 3;
+			printf(fmt, expression(inp, true));
+			start = inp->lineptr;
+			if (*start != ')') {
+				asm_error(inp, "bad expression in DISP");
+				break;
+			}
+			++start;
+		}
+		if (end > start)
+			fwrite(start, end - start, 1, stdout);
 		putc('\n', stdout);
 	}
 }
