@@ -249,6 +249,7 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 		fclose(inp->fp);
 		inp->fp = fp;
 		inp->name = filename.str;
+		inp->lineno = 1;
 	}
 	else {
 		asm_error(inp, "unable to open chained file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
