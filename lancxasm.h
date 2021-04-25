@@ -78,6 +78,7 @@ extern struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, i
 extern uint16_t symbol_lookup(struct inctx *inp, bool no_undef);
 extern struct symbol *symbol_macfind(char *opname);
 extern void symbol_print(void);
+extern void symbol_swift(void);
 
 /* expression.c */
 extern int expression(struct inctx *inp, bool no_undef);

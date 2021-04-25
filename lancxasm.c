@@ -8,7 +8,7 @@
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
 static unsigned err_count, err_column, cond_level, mac_count, mac_no;
-static bool mac_expand = false;
+static bool swift_sym = false, mac_expand = false;
 static uint8_t cond_stack[32];
 
 char *err_message = NULL, list_char;
@@ -512,11 +512,14 @@ static const char bbc_chars[] = "?<;+/#=>";
 int main(int argc, char **argv)
 {
     int opt, status = 0;
-    while ((opt = getopt(argc, argv, "al:o:p:rw:ACFLMPST")) != -1) {
+    while ((opt = getopt(argc, argv, "adl:o:p:rw:ACFLMPST")) != -1) {
         switch(opt) {
             case 'a':
                 symbol_cmp = symbol_cmp_ade;
                 break;
+            case 'd':
+				swift_sym = true;
+				break;
             case 'l':
                 list_filename = optarg;
                 list_opts |= LISTO_ENABLED;
@@ -594,6 +597,8 @@ int main(int argc, char **argv)
 					}
 					if (list_fp && !(list_opts & LISTO_SYMTAB))
 						symbol_print();
+					if (swift_sym)
+						symbol_swift();
 				}
 			}
 			if (obj_fp)

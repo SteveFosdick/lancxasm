@@ -146,3 +146,28 @@ void symbol_print(void)
 			putc('\n', list_fp);
 	}
 }
+
+static bool first;
+
+static void print_swift(const void *nodep, VISIT which, int depth)
+{
+	if (which == leaf || which == postorder) {
+		const struct symbol *sym = *(const struct symbol **)nodep;
+		if (sym->scope == SCOPE_GLOBAL) {
+			const char *fmt = ",'%s':%uL";
+			if (first) {
+				fmt = "'%s':%uL";
+				first = false;
+			}
+			printf(fmt, sym->name, sym->value);
+		}
+	}
+}
+		
+void symbol_swift(void)
+{
+	fputs("[{", stdout);
+	first = true;
+	twalk(symbols, print_swift);
+	fputs("}]\n", stdout);
+}
