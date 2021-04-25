@@ -248,10 +248,20 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 	struct dstring filename;
 	FILE *fp = parse_open(inp, &filename, "r");
 	if (fp) {
-		fclose(inp->fp);
-		inp->fp = fp;
-		inp->name = filename.str;
-		inp->lineno = 1;
+		/* find the most local input context that is a file. */
+		struct inctx *ctx = inp;
+		while (ctx && !ctx->fp)
+			ctx = ctx->parent;
+		if (ctx) {
+			fclose(ctx->fp);
+			ctx->fp = fp;
+			ctx->name = filename.str;
+			ctx->lineno = 1;
+		}
+		else {
+			fclose(fp);
+			asm_error(inp, "failed to chain file, failed to find file-based context");
+		}
 	}
 	else {
 		asm_error(inp, "unable to open chained file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
@@ -265,6 +275,7 @@ static void pseudo_include(struct inctx *inp, struct symbol *sym)
 	FILE *fp = parse_open(inp, &filename, "r");
 	if (fp) {
 		struct inctx incfile;
+		incfile.parent = inp;
 		incfile.fp = fp;
 		incfile.name = filename.str;
 		incfile.whence = 'I';
@@ -314,6 +325,8 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 		int ch = non_space(inp);
 		if (ch != '\n') {
 			struct inctx qtx;
+			qtx.parent = inp;
+			qtx.fp = NULL;
 			qtx.name = "query";
 			qtx.lineno = 0;
 			qtx.line.str = NULL;

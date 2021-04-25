@@ -12,6 +12,7 @@
 #define MAX_TAB_STOPS 14
 
 struct inctx {
+	struct inctx *parent;
 	FILE *fp;
 	const char *name;
 	unsigned lineno;

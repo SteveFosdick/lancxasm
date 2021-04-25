@@ -268,7 +268,8 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 
 		/* Set up an input context for this macro */
 		struct inctx mtx;
-		mtx.fp = inp->fp;
+		mtx.parent = inp;
+		mtx.fp = NULL;
 		mtx.name = inp->name;
 		mtx.lineno = inp->lineno;
 		mtx.line.str = NULL;
@@ -290,8 +291,6 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 				mtx.line.str = save;
 			}
 		}
-		inp->fp = mtx.fp;
-		inp->name = mtx.name;
 		if (mtx.line.allocated)
 			free(mtx.line.str);
 		if (save_mac_expand)
@@ -488,10 +487,8 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
     for (int argno = optind; argno < argc; argno++) {
 		const char *fn = argv[argno];
 		inp->name = fn;
-		if ((inp->fp = fopen(fn, "r"))) {
-			inp->whence = ' ';
+		if ((inp->fp = fopen(fn, "r")))
 			asm_file(inp);
-		}
 		else {
 			fprintf(stderr, "lancxasm: unable to open source file '%s': %s\n", fn, strerror(errno));
 			err_count++;
@@ -544,6 +541,8 @@ int main(int argc, char **argv)
     }
     if (status == 0) {
 		struct inctx infile;
+		infile.parent = NULL;
+		infile.whence = ' ';
 		dstr_empty(&infile.line, MIN_LINE);
 		dstr_empty(&objcode, MIN_LINE);
 		if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
