@@ -7,7 +7,8 @@
 
 static const char *list_filename = NULL;
 static const char *obj_filename = NULL;
-static unsigned err_count, err_column, cond_level, mac_count;
+static unsigned err_count, err_column, cond_level, mac_count, mac_no;
+static bool mac_expand = false;
 static uint8_t cond_stack[32];
 
 char *err_message = NULL;
@@ -234,7 +235,7 @@ static void asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10]
 		int digit = *++at;
 		if (digit == '0') {
 			char count[6];
-			size_t size = snprintf(count, sizeof(count), "%05d", mac_count);
+			size_t size = snprintf(count, sizeof(count), "%05d", mac_no);
 			dstr_add_bytes(&mtx->line, count, size);
 		}
 		else if (digit >= '1' && digit <= '9') {
@@ -259,8 +260,11 @@ static void asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10]
 static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 {
 	if (mac->scope == SCOPE_MACRO) {
+		unsigned save_mac_no = mac_no;
+		bool save_mac_expand = mac_expand;
+		mac_expand = true;
+		mac_no = mac_count++;
 		char *params[10];
-		++mac_count;
 		asm_macparse(inp, params);
 		list_line(inp);
 
@@ -292,6 +296,9 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 		inp->name = mtx.name;
 		if (mtx.line.allocated)
 			free(mtx.line.str);
+		if (save_mac_expand)
+			mac_no = save_mac_no;
+		mac_expand = save_mac_expand;
 	}
 	else {
 		asm_error(inp, "%s is a value, not a MACRO", mac->name);
