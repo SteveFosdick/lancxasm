@@ -41,7 +41,7 @@ struct symbol {
 };
 
 /* lancxasm.c */
-extern char *err_message;
+extern char *err_message, list_char;
 extern FILE *obj_fp, *list_fp;
 extern unsigned code_list_level, src_list_level, passno, scope_no;
 extern unsigned page_len, page_width, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];

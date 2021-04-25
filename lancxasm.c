@@ -11,7 +11,7 @@ static unsigned err_count, err_column, cond_level, mac_count, mac_no;
 static bool mac_expand = false;
 static uint8_t cond_stack[32];
 
-char *err_message = NULL;
+char *err_message = NULL, list_char;
 FILE *obj_fp = NULL, *list_fp = NULL;
 unsigned code_list_level = 1, src_list_level = 2, passno, scope_no;
 unsigned page_len = 0, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
@@ -78,23 +78,22 @@ static void list_extra(struct inctx *inp)
 	uint8_t *bytes = (uint8_t *)objcode.str + 3;
 	while (togo >= 3) {
 		list_pagecheck(inp);
-		fprintf(list_fp, "%c      %04X: %02X %02X %02X\n", inp->whence, addr, bytes[0], bytes[1], bytes[2]);
+		fprintf(list_fp, "%04X: %02X %02X %02X\n", addr, bytes[0], bytes[1], bytes[2]);
 		togo -= 3;
 		addr += 3;
 		bytes += 3;
 	}
 	if (togo > 0) {
 		list_pagecheck(inp);
-		fprintf(list_fp, "%c      %04X: ", inp->whence, addr);
 		switch(togo) {
 			case 1:
-				fprintf(list_fp, "%02X\n", bytes[0]);
+				fprintf(list_fp, "%04X: %02X\n", addr, bytes[0]);
 				break;
 			case 2:
-				fprintf(list_fp, "%02X %02X\n", bytes[0], bytes[1]);
+				fprintf(list_fp, "%04X: %02X %02X\n", addr, bytes[0], bytes[1]);
 				break;
 			default:
-				fprintf(list_fp, "%02X %02X %02X\n", bytes[0], bytes[1], bytes[2]);
+				fprintf(list_fp, "%04X: %02X %02X %02X\n", addr, bytes[0], bytes[1], bytes[2]);
 				break;
 		}
 	}
@@ -105,26 +104,25 @@ static void list_line(struct inctx *inp)
 	if (passno && list_fp && !(cond_skipping && list_skip_cond)) {
 		if (src_list_level && (src_list_level >= 2 || inp->whence != 'M')) {
 			list_pagecheck(inp);
-			fprintf(list_fp, "%c%5u %04X: ", cond_skipping ? 'S' : inp->whence, inp->lineno, list_value & 0xffff);
 			uint8_t *bytes = (uint8_t *)objcode.str;
 			switch(objcode.used) {
 				case 0:
-					fputs("        ", list_fp);
+					fprintf(list_fp, "%04X%c         ", list_value & 0xffff, list_char);
 					break;
 				case 1:
-					fprintf(list_fp, "%02X      ", bytes[0]);
+					fprintf(list_fp, "%04X%c %02X      ", list_value & 0xffff, list_char, bytes[0]);
 					break;
 				case 2:
-					fprintf(list_fp, "%02X %02X   ", bytes[0], bytes[1]);
+					fprintf(list_fp, "%04X%c %02X %02X   ", list_value & 0xffff, list_char, bytes[0], bytes[1]);
 					break;
 				default:
-					fprintf(list_fp, "%02X %02X %02X", bytes[0], bytes[1], bytes[2]);
+					fprintf(list_fp, "%04X%c %02X %02X %02X", list_value & 0xffff, list_char, bytes[0], bytes[1], bytes[2]);
 					break;
 			}
 			if (*inp->line.str == '\n')
-				putc('\n', list_fp);
+				fprintf(list_fp, " %c%5u\n", cond_skipping ? 'S' : inp->whence, inp->lineno);
 			else {
-				putc(' ', list_fp);
+				fprintf(list_fp, " %c%5u  ", cond_skipping ? 'S' : inp->whence, inp->lineno);
 				unsigned col = 1;
 				const char *ptr = inp->line.str;
 				size_t remain = inp->line.used;
@@ -356,8 +354,12 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 					asm_error(inp, "Too many levels of IF");
 				else {
 					cond_stack[cond_level++] = cond_skipping;
-					if (!cond_skipping)
-						cond_skipping = !expression(inp, true);
+					if (!cond_skipping) {
+						int value = expression(inp, true);
+						list_value = value;
+						list_char = '=';
+						cond_skipping = !value;
+					}
 				}
 				list_line(inp);
 			}
@@ -396,6 +398,7 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 static void asm_line(struct inctx *inp)
 {
 	list_value = org;
+	list_char = ':';
 	size_t label_size = 0;
 	int ch = *inp->lineptr;
 	/* parse any label */

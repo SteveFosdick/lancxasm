@@ -11,12 +11,14 @@ static void pseudo_equ(struct inctx *inp, struct symbol *sym)
 		uint16_t value = expression(inp, passno);
 		sym->value = value;
 		list_value = value;
+		list_char = '=';
 	}
 }
 
 static void pseudo_org(struct inctx *inp, struct symbol *sym)
 {
 	list_value = org = expression(inp, true);
+	list_char = ':';
 	if (sym)
 		sym->value = org;
 }
@@ -335,6 +337,7 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 						else {
 							sym->value = value;
 							list_value = value;
+							list_char = '=';
 							return;
 						}
 					}
