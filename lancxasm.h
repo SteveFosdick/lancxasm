@@ -11,6 +11,16 @@
 #define MIN_LINE 132
 #define MAX_TAB_STOPS 14
 
+#define LISTO_PAGE     0x001
+#define LISTO_LINE     0x002
+#define LISTO_FF       0x004
+#define LISTO_SYMTAB   0x008
+#define LISTO_MACRO    0x010
+#define LISTO_ALLCODE  0x020
+#define LISTO_CODEFILE 0x040
+#define LISTO_SKIPPED  0x080
+#define LISTO_ENABLED  0x100
+
 struct inctx {
 	struct inctx *parent;
 	FILE *fp;
@@ -44,11 +54,11 @@ struct symbol {
 /* lancxasm.c */
 extern char *err_message, list_char;
 extern FILE *obj_fp, *list_fp;
-extern unsigned code_list_level, src_list_level, passno, scope_no;
+extern unsigned list_opts, passno, scope_no;
 extern unsigned page_len, page_width, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 extern const unsigned default_tabs[MAX_TAB_STOPS];
 extern uint16_t org, org_code, org_dsect, list_value, load_addr, exec_addr, addr_msw;
-extern bool no_cmos, list_skip_cond, in_dsect, in_ds, codefile, cond_skipping;
+extern bool no_cmos, in_dsect, in_ds, codefile, cond_skipping;
 extern struct dstring objcode, title;
 extern struct symbol *macsym;
 

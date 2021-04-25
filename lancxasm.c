@@ -13,11 +13,11 @@ static uint8_t cond_stack[32];
 
 char *err_message = NULL, list_char;
 FILE *obj_fp = NULL, *list_fp = NULL;
-unsigned code_list_level = 1, src_list_level = 2, passno, scope_no;
-unsigned page_len = 0, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
+unsigned passno, scope_no, list_opts = 0;
+unsigned page_len = 66, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 const unsigned default_tabs[MAX_TAB_STOPS] = { 8, 16, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 115, 123 };
 uint16_t org, org_code, org_dsect, list_value, load_addr = 0, exec_addr = 0, addr_msw = 0;
-bool no_cmos = false, list_skip_cond = false, in_dsect, in_ds, codefile, cond_skipping;
+bool no_cmos = false, in_dsect, in_ds, codefile, cond_skipping;
 struct dstring objcode, title;
 struct symbol *macsym = NULL;
 
@@ -63,11 +63,13 @@ static void list_header(struct inctx *inp)
 
 static void list_pagecheck(struct inctx *inp)
 {
-	if (cur_line++ == 0 && page_len)
-		list_header(inp);
-	else if (page_len && cur_line >= page_len) {
-		putc('\f', list_fp);
-		list_header(inp);
+	if (!(list_opts & LISTO_PAGE)) {
+		if (cur_line++ == 0)
+			list_header(inp);
+		else if (cur_line >= page_len) {
+			putc((list_opts & LISTO_FF) ? '\f' : '\n', list_fp);
+			list_header(inp);
+		}
 	}
 }
 
@@ -101,28 +103,32 @@ static void list_extra(struct inctx *inp)
 
 static void list_line(struct inctx *inp)
 {
-	if (passno && list_fp && !(cond_skipping && list_skip_cond)) {
-		if (src_list_level && (src_list_level >= 2 || inp->whence != 'M')) {
+	if (passno && list_fp && !(cond_skipping && (list_opts & LISTO_SKIPPED))) {
+		if (list_opts & LISTO_ENABLED && !(list_opts & LISTO_MACRO && inp->whence == 'M')) {
 			list_pagecheck(inp);
 			uint8_t *bytes = (uint8_t *)objcode.str;
 			switch(objcode.used) {
 				case 0:
-					fprintf(list_fp, "%04X%c         ", list_value & 0xffff, list_char);
+					fprintf(list_fp, "%04X%c          ", list_value & 0xffff, list_char);
 					break;
 				case 1:
-					fprintf(list_fp, "%04X%c %02X      ", list_value & 0xffff, list_char, bytes[0]);
+					fprintf(list_fp, "%04X%c %02X       ", list_value & 0xffff, list_char, bytes[0]);
 					break;
 				case 2:
-					fprintf(list_fp, "%04X%c %02X %02X   ", list_value & 0xffff, list_char, bytes[0], bytes[1]);
+					fprintf(list_fp, "%04X%c %02X %02X    ", list_value & 0xffff, list_char, bytes[0], bytes[1]);
 					break;
 				default:
-					fprintf(list_fp, "%04X%c %02X %02X %02X", list_value & 0xffff, list_char, bytes[0], bytes[1], bytes[2]);
+					fprintf(list_fp, "%04X%c %02X %02X %02X ", list_value & 0xffff, list_char, bytes[0], bytes[1], bytes[2]);
 					break;
 			}
+			putc(cond_skipping ? 'S' : inp->whence, list_fp);
+			if (!(list_opts & LISTO_LINE))
+				fprintf(list_fp, "%5u", inp->lineno);
 			if (*inp->line.str == '\n')
-				fprintf(list_fp, " %c%5u\n", cond_skipping ? 'S' : inp->whence, inp->lineno);
+				 putc('\n', list_fp);
 			else {
-				fprintf(list_fp, " %c%5u  ", cond_skipping ? 'S' : inp->whence, inp->lineno);
+				putc(' ', list_fp);
+				putc(' ', list_fp);
 				unsigned col = 1;
 				const char *ptr = inp->line.str;
 				size_t remain = inp->line.used;
@@ -165,7 +171,7 @@ static void list_line(struct inctx *inp)
 			list_pagecheck(inp);
 			fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
 		}
-		if (src_list_level && code_list_level >= 1 && objcode.used > 3 && (!codefile || code_list_level >= 2))
+		if (objcode.used > 3 && (list_opts & LISTO_ALLCODE) && (!codefile || (list_opts & LISTO_CODEFILE)))
 			list_extra(inp);
 	}
 }
@@ -506,19 +512,14 @@ static const char bbc_chars[] = "?<;+/#=>";
 int main(int argc, char **argv)
 {
     int opt, status = 0;
-    while ((opt = getopt(argc, argv, "ac:f:l:o:p:rsw:")) != -1) {
+    while ((opt = getopt(argc, argv, "al:o:p:rw:ACFLMPST")) != -1) {
         switch(opt) {
             case 'a':
                 symbol_cmp = symbol_cmp_ade;
                 break;
-            case 'c':
-                code_list_level = atoi(optarg);
-                break;
-            case 'f':
-                list_filename = optarg;
-                break;
             case 'l':
-                src_list_level = atoi(optarg);
+                list_filename = optarg;
+                list_opts |= LISTO_ENABLED;
                 break;
             case 'o':
                 obj_filename = optarg;
@@ -529,11 +530,32 @@ int main(int argc, char **argv)
             case 'r':
                 no_cmos = true;
                 break;
-            case 's':
-                list_skip_cond = true;
-                break;
             case 'w':
 				page_width = atoi(optarg);
+				break;
+			case 'A':
+				list_opts |= LISTO_ALLCODE;
+				break;
+			case 'C':
+				list_opts |= LISTO_CODEFILE;
+				break;
+			case 'F':
+				list_opts |= LISTO_FF;
+				break;
+			case 'L':
+				list_opts |= LISTO_LINE;
+				break;
+			case 'M':
+				list_opts |= LISTO_MACRO;
+				break;
+			case 'P':
+				list_opts |= LISTO_PAGE;
+				break;
+			case 'S':
+				list_opts |= LISTO_SKIPPED;
+				break;
+			case 'T':
+				list_opts |= LISTO_SYMTAB;
 				break;
             default:
                 status = 1;
@@ -570,7 +592,7 @@ int main(int argc, char **argv)
 						fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);
 						status = 5;
 					}
-					if (list_fp && src_list_level)
+					if (list_fp && !(list_opts & LISTO_SYMTAB))
 						symbol_print();
 				}
 			}

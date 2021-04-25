@@ -201,12 +201,75 @@ static void pseudo_hex(struct inctx *inp, struct symbol *sym)
 
 static void pseudo_clst(struct inctx *inp, struct symbol *sym)
 {
-	code_list_level = expression(inp, true);
+	switch(expression(inp, true)) {
+		case 0:
+			list_opts &= ~(LISTO_ALLCODE|LISTO_CODEFILE);
+			break;
+		default:
+			list_opts = (list_opts & ~LISTO_CODEFILE)|LISTO_ALLCODE;
+			break;
+		case 2:
+			list_opts |= LISTO_ALLCODE|LISTO_CODEFILE;
+	}
 }
 
 static void pseudo_lst(struct inctx *inp, struct symbol *sym)
 {
-	src_list_level = expression(inp, true);
+	int ch = non_space(inp);
+	if (ch == 'O' || ch == 'o') {
+		ch = inp->lineptr[1];
+		if (ch == 'N' || ch == 'n') {
+			/* LST ON */
+			list_opts |= LISTO_ENABLED|LISTO_MACRO;
+			return;
+		}
+		else if (ch == 'F' || ch == 'f') {
+			ch = inp->lineptr[2];
+			if (ch == 'F' || ch == 'f') {
+				/* LST OFF */
+				list_opts &= ~LISTO_ENABLED;
+				return;
+			}
+		}
+	}
+	else if (ch == 'F' || ch == 'f') {
+		ch = inp->lineptr[1];
+		if (ch == 'U' || ch == 'u') {
+			ch = inp->lineptr[2];
+			if (ch == 'L' || ch == 'l') {
+				ch = inp->lineptr[3];
+				if (ch == 'L' || ch == 'l') {
+					/* LST FULL */
+					list_opts = (list_opts & ~LISTO_MACRO)|LISTO_ENABLED;
+					return;
+				}
+			}
+		}
+	}
+	else {
+		switch(expression(inp, true)) {
+			case 0:
+				/* Equivalent to OFF */
+				list_opts &= ~LISTO_ENABLED;
+				break;
+			case 1:
+				/* Equivalent to ON */
+				list_opts |= LISTO_ENABLED|LISTO_MACRO;
+				break;
+			default:
+				/* Equivalent to FULL */
+				list_opts = (list_opts & ~LISTO_MACRO)|LISTO_ENABLED;
+		}
+	}
+}
+
+static void pseudo_listo(struct inctx *inp, struct symbol *sym)
+{
+	if (passno ) {
+		int value = expression(inp, true);
+		if (!err_message)
+			list_opts ^= value & 0x1ff;
+	}
 }
 
 static void pseudo_dsect(struct inctx *inp, struct symbol *sym)
@@ -369,12 +432,12 @@ static void pseudo_endm(struct inctx *inp, struct symbol *sym)
 
 static void pseudo_lfcond(struct inctx *inp, struct symbol *sym)
 {
-	list_skip_cond = false;
+	list_opts &= ~LISTO_SKIPPED;
 }
 
 static void pseudo_sfcond(struct inctx *inp, struct symbol *sym)
 {
-	list_skip_cond = true;
+	list_opts |= LISTO_SKIPPED;
 }
 
 static void pseudo_page(struct inctx *inp, struct symbol *sym)
@@ -533,6 +596,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "INCLUDE", pseudo_include },
 	{ "INFO",    pseudo_disp2   },
 	{ "LFCOND",  pseudo_lfcond  },
+	{ "LISTO",   pseudo_listo   },
 	{ "LOAD",    pseudo_load    },
 	{ "LST",     pseudo_lst     },
 	{ "MSW",     pseudo_msw     },
