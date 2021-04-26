@@ -116,17 +116,17 @@ static int expr_compare(struct inctx *inp, bool no_undef)
             value = (value != expr_bitwise(inp, no_undef)) ? -1 : 0;
         }
         else if (ch == '>') {
-            ch = ++inp->lineptr;
+            ch = *++inp->lineptr;
             int right = expr_bitwise(inp, no_undef);
             if (ch == '=') {
-				inp->lineptr;
+				++inp->lineptr;
 				value = (value >= right) ? -1 : 0;
 			}
 			else
 				value = (value > right) ? -1 : 0;
         }
         else if (ch == '<') {
-            ch = ++inp->lineptr;
+            ch = *++inp->lineptr;
             int right = expr_bitwise(inp, no_undef);
             if (ch == '=') {
 				++inp->lineptr;
