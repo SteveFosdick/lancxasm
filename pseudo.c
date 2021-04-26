@@ -594,6 +594,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "CODE",    pseudo_code    },
 	{ "CSTR",    pseudo_cstr    },
 	{ "DATA",    pseudo_data    },
+	{ "DB",      pseudo_dfb     },
 	{ "DC",      pseudo_dc      },
 	{ "DDB",     pseudo_dfdb    },
 	{ "DEND",    pseudo_dend    },
