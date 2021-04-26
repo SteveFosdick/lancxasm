@@ -57,21 +57,29 @@ static void pseudo_str(struct inctx *inp, struct symbol *sym)
 	dstr_add_ch(&objcode, '\r');
 }
 
+static void plant_length(struct inctx *inp, size_t posn)
+{
+	size_t len = objcode.used - posn;
+	if (len > 0xff)
+		asm_error(inp, "string too long for single-byte count");
+	objcode.str[posn] = len;
+}
+
 static void pseudo_casc(struct inctx *inp, struct symbol *sym)
 {
 	size_t posn = objcode.used;
-	dstr_add_ch(&objcode, 0);
+	dstr_add_ch(&objcode, 0); /* length to be filled in later */
 	pseudo_asc(inp, sym);
-	objcode.str[posn] = objcode.used - posn;
+	plant_length(inp, posn);
 }
 
 static void pseudo_cstr(struct inctx *inp, struct symbol *sym)
 {
 	size_t posn = objcode.used;
-	dstr_add_ch(&objcode, 0);
+	dstr_add_ch(&objcode, 0); /* length to be filled in later */
 	pseudo_asc(inp, sym);
 	dstr_add_ch(&objcode, '\r');
-	objcode.str[posn] = objcode.used - posn;
+	plant_length(inp, posn);
 }
 
 static void plant_bytes(struct inctx *inp, size_t count, uint16_t byte)
@@ -127,7 +135,7 @@ static void plant_data(struct inctx *inp, const char *desc, void (*planter)(stru
 	} while (ch == ',');
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
 		asm_error(inp, "bad %s expression", desc);
-}	
+}
 
 static void pseudo_dfb(struct inctx *inp, struct symbol *sym)
 {
@@ -164,7 +172,7 @@ static void pseudo_data(struct inctx *inp, struct symbol *sym)
 	} while (ch == ',');
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
 		asm_error(inp, "bad %s expression", "data");
-}	
+}
 
 static unsigned hex_nyb(struct inctx *inp, int ch)
 {
