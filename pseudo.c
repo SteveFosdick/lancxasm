@@ -57,6 +57,14 @@ static void pseudo_str(struct inctx *inp, struct symbol *sym)
 	dstr_add_ch(&objcode, '\r');
 }
 
+static void pseudo_dc(struct inctx *inp, struct symbol *sym)
+{
+	size_t used = objcode.used;
+	pseudo_asc(inp, sym);
+	if (objcode.used > used)
+		objcode.str[objcode.used-1] |= 0x80;
+}
+
 static void plant_length(struct inctx *inp, size_t posn)
 {
 	size_t len = objcode.used - posn;
@@ -586,9 +594,11 @@ static const struct op_type pseudo_ops[] = {
 	{ "CODE",    pseudo_code    },
 	{ "CSTR",    pseudo_cstr    },
 	{ "DATA",    pseudo_data    },
+	{ "DC",      pseudo_dc      },
 	{ "DDB",     pseudo_dfdb    },
 	{ "DEND",    pseudo_dend    },
 	{ "DFB",     pseudo_dfb     },
+	{ "DFS",     pseudo_ds      },
 	{ "DFW",     pseudo_dfw     },
 	{ "DISP",    pseudo_disp    },
 	{ "DISP1",   pseudo_disp1   },

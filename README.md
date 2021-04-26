@@ -586,7 +586,7 @@ and _TABS_.
 
 The following directives, implemented by the Lancaster Assembler and not
 by ADE, are **NOT** implemented in LaXasm: _AGO_, _AIF_, _AIFDEF_,
-_AIFNDEF_, _ALEN_, _ASET_, _ASTR_, _ASTRIP_, _CHR_, _DEFPARS_, _DFS_,
+_AIFNDEF_, _ALEN_, _ASET_, _ASTR_, _ASTRIP_, _CHR_, _DEFPARS_,
 _FIN_, _IFDEF_, _IFNDEF_, _MEXIT_, _MLEN_, _MSET_, _MSTR_, _MSTRIP_,
 _REP_, _SYSVDU1_, _SYSVDU2_, _TIME_, _WAIT_, _WAIT1_, _WAIT2_.
 
@@ -603,7 +603,7 @@ The following directives, implemented by ADE+ and not by the Lancaster
 Assembler, are implemented in LaXasm: _BLOCK_, _DATA_, _LISTO_, _WIDTH_.
 
 The following directives, implemented by ADE+ and not by the Lancaster
-Assembler, are **NOT** implemented in LaXasm: _ASECT_, _DC_, _EMBED_,
+Assembler, are **NOT** implemented in LaXasm: _ASECT_, _EMBED_,
 _END_, _ENT_, _EXT_, _EXZ_, _GEQU_, _GET_, _LLST_, _MACLIB_, _MODULE_,
 _MSB_, _NOLIB_, _OBJ_, _OPT_, _PAUSE_, _QSTR_, _REPEAT_, _RESUME_,
 _RSECT_, _RZP_, _SYSFX_, _UNTIL_, _WEND_, _WHILE_
