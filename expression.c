@@ -78,7 +78,7 @@ static int expr_unary(struct inctx *inp, bool no_undef)
     }
     else if (ch == '~') {
         ++inp->lineptr;
-        return expr_bracket(inp, no_undef) ? 0 : -1;
+        return expr_bracket(inp, no_undef) ^ 0xffff;
     }
     else
         return expr_bracket(inp, no_undef);
