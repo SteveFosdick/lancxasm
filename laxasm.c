@@ -309,6 +309,34 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 	}
 }
 
+#define IF_EXPR 0
+#define IF_DEF  1
+#define IF_NDEF 2
+
+static void asm_if(struct inctx *inp, int iftype)
+{
+	if (cond_level == (sizeof(cond_stack)-1))
+		asm_error(inp, "Too many levels of IF");
+	else {
+		cond_stack[cond_level++] = cond_skipping;
+		if (!cond_skipping) {
+			int value;
+			if (iftype == IF_EXPR)
+				value = expression(inp, true);
+			else {
+				if (symbol_lookup(inp, true) && iftype == IF_DEF)
+					value = -1;
+				else
+					value = 0;
+			}
+			list_value = value;
+			list_char = '=';
+			cond_skipping = !value;
+		}
+	}
+	list_line(inp);
+}
+
 static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 {
 	if (asm_isendchar(ch))
@@ -354,20 +382,12 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 				if ((sym = symbol_enter(inp, label_size, scope)) && !passno)
 					sym->value = org;
 			}
-			if (!strncmp(opname, "IF", opsize)) {
-				if (cond_level == (sizeof(cond_stack)-1))
-					asm_error(inp, "Too many levels of IF");
-				else {
-					cond_stack[cond_level++] = cond_skipping;
-					if (!cond_skipping) {
-						int value = expression(inp, true);
-						list_value = value;
-						list_char = '=';
-						cond_skipping = !value;
-					}
-				}
-				list_line(inp);
-			}
+			if (!strncmp(opname, "IF", opsize))
+				asm_if(inp, IF_EXPR);
+			else if (!strncmp(opname, "IFDEF", opsize))
+				asm_if(inp, IF_DEF);
+			else if (!strncmp(opname, "IFNDEF", opsize))
+				asm_if(inp, IF_NDEF);
 			else if (!strncmp(opname, "ELSE", opsize)) {
 				if (!cond_level)
 					asm_error(inp, "ELSE without IF");
@@ -375,7 +395,7 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 					cond_skipping = !cond_skipping;
 				list_line(inp);
 			}
-			else if (!strncmp(opname, "FI", opsize)) {
+			else if (!strncmp(opname, "FI", opsize) || !strncmp(opname, "FIN", opsize)) {
 				if (!cond_level)
 					asm_error(inp, "FI without IF");
 				else

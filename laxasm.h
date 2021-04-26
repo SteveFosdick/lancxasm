@@ -75,8 +75,8 @@ extern int symbol_parse(struct inctx *inp);
 extern struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size, int scope);
 extern struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scope);
 extern struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, int scope);
-extern uint16_t symbol_lookup(struct inctx *inp, bool no_undef);
-extern struct symbol *symbol_macfind(char *opname);
+extern struct symbol *symbol_lookup(struct inctx *inp, bool no_undef);
+//extern struct symbol *symbol_macfind(char *opname);
 extern void symbol_print(void);
 extern void symbol_swift(void);
 
@@ -90,4 +90,4 @@ extern bool m6502_op(struct inctx *inp, const char *opname);
 extern bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym);
 
 #endif
-	
+

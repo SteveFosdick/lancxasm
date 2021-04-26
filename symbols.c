@@ -40,7 +40,7 @@ int symbol_parse(struct inctx *inp)
 		ch = *++inp->lineptr;
 	while ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '$' || ch == '_');
 	return ch;
-}	
+}
 
 static void symbol_uppercase(const char *src, size_t label_size, char *dest)
 {
@@ -92,7 +92,7 @@ struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, int scop
 	return NULL;
 }
 
-uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
+struct symbol *symbol_lookup(struct inctx *inp, bool no_undef)
 {
 	const char *lab_start = inp->lineptr;
 	symbol_parse(inp);
@@ -103,13 +103,11 @@ uint16_t symbol_lookup(struct inctx *inp, bool no_undef)
 	sym.scope = *lab_start == ':' ? scope_no : SCOPE_GLOBAL;
 	sym.name = label;
 	void *node = tfind(&sym, &symbols, symbol_cmp);
-	if (node) {
-		struct symbol *sym = *(struct symbol **)node;
-		return sym->value;
-	}
+	if (node)
+		return *(struct symbol **)node;
 	if (no_undef)
 		asm_error(inp, "symbol %s not found", label);
-	return org;
+	return NULL;
 }
 
 static void print_one(const void *nodep, VISIT which, int depth)
@@ -163,7 +161,7 @@ static void print_swift(const void *nodep, VISIT which, int depth)
 		}
 	}
 }
-		
+
 void symbol_swift(void)
 {
 	fputs("[{", stdout);

@@ -587,7 +587,7 @@ and _TABS_.
 The following directives, implemented by the Lancaster Assembler and not
 by ADE, are **NOT** implemented in LaXasm: _AGO_, _AIF_, _AIFDEF_,
 _AIFNDEF_, _ALEN_, _ASET_, _ASTR_, _ASTRIP_, _CHR_, _DEFPARS_,
-_FIN_, _IFDEF_, _IFNDEF_, _MEXIT_, _MLEN_, _MSET_, _MSTR_, _MSTRIP_,
+_MEXIT_, _MLEN_, _MSET_, _MSTR_, _MSTRIP_,
 _REP_, _SYSVDU1_, _SYSVDU2_, _TIME_, _WAIT_, _WAIT1_, _WAIT2_.
 
 ### With ADE/ADE+
