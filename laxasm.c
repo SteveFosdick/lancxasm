@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "lancxasm.h"
+#include "laxasm.h"
 #include <errno.h>
 #include <search.h>
 #include <stdlib.h>
@@ -496,12 +496,12 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
 		if ((inp->fp = fopen(fn, "r")))
 			asm_file(inp);
 		else {
-			fprintf(stderr, "lancxasm: unable to open source file '%s': %s\n", fn, strerror(errno));
+			fprintf(stderr, "laxasm: unable to open source file '%s': %s\n", fn, strerror(errno));
 			err_count++;
 		}
 	}
 	if (cond_level) {
-		fprintf(stderr, "lancxasm: %u level(s) of IF still in-force (missing FI) at end of pass %u\n", cond_level, passno+1);
+		fprintf(stderr, "laxasm: %u level(s) of IF still in-force (missing FI) at end of pass %u\n", cond_level, passno+1);
 		err_count++;
 	}
 }
@@ -571,12 +571,12 @@ int main(int argc, char **argv)
 		dstr_empty(&infile.line, MIN_LINE);
 		dstr_empty(&objcode, MIN_LINE);
 		if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
-			fprintf(stderr, "lancxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
+			fprintf(stderr, "laxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
 			status = 2;
 		}
 		else {
 			if (obj_filename && (obj_fp = fopen(obj_filename, "wb")) == NULL) {
-				fprintf(stderr, "lancxasm: unable to open object code file '%s': %s\n", list_filename, strerror(errno));
+				fprintf(stderr, "laxasm: unable to open object code file '%s': %s\n", list_filename, strerror(errno));
 				status = 3;
 			}
 			else {
@@ -584,7 +584,7 @@ int main(int argc, char **argv)
 				symbol_enter = symbol_enter_pass1;
 				asm_pass(argc, argv, &infile);
 				if (err_count) {
-					fprintf(stderr, "lancxasm: %u errors, on pass 1, pass 2 skipped\n", err_count);
+					fprintf(stderr, "laxasm: %u errors, on pass 1, pass 2 skipped\n", err_count);
 					status = 4;
 				}
 				else {
@@ -592,7 +592,7 @@ int main(int argc, char **argv)
 					symbol_enter = symbol_enter_pass2;
 					asm_pass(argc, argv, &infile);
 					if (err_count) {
-						fprintf(stderr, "lancxasm: %u errors, on pass 2\n", err_count);
+						fprintf(stderr, "laxasm: %u errors, on pass 2\n", err_count);
 						status = 5;
 					}
 					if (list_fp && !(list_opts & LISTO_SYMTAB))
@@ -627,13 +627,13 @@ int main(int argc, char **argv)
 					fclose(inf_fp);
 				}
 				else {
-					fprintf(stderr, "lancxasm: unable to open INF file '%s': %s\n", inf_file.str, strerror(errno));
+					fprintf(stderr, "laxasm: unable to open INF file '%s': %s\n", inf_file.str, strerror(errno));
 					status = 6;
 				}
 			}
 		}
 	}
     else
-        fputs("Usage: lancxasm [ -a ] [ -c level ] [ -f list-file ] [ -l level ] [ -o obj-file ] [ -r ] [ -s ] <file> [ ... ]\n", stderr);
+        fputs("Usage: laxasm [ -a ] [ -c level ] [ -f list-file ] [ -l level ] [ -o obj-file ] [ -r ] [ -s ] <file> [ ... ]\n", stderr);
     return status;
 }

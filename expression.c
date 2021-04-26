@@ -1,4 +1,4 @@
-#include "lancxasm.h"
+#include "laxasm.h"
 #include <stdlib.h>
 
 static int expr_term(struct inctx *inp, bool no_undef)

@@ -51,7 +51,7 @@ struct symbol {
 	char name_str[1];
 };
 
-/* lancxasm.c */
+/* laxasm.c */
 extern char *err_message, list_char;
 extern FILE *obj_fp, *list_fp;
 extern unsigned list_opts, passno, scope_no;
