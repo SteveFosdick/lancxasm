@@ -153,7 +153,15 @@ static int expr_muldiv(struct inctx *inp, bool no_undef)
             ++inp->lineptr;
             value /= expr_compare(inp, no_undef);
         }
-        else
+        else if (ch == '<' && inp->lineptr[1] == '<') {
+			inp->lineptr += 2;
+			value <<= expr_compare(inp, no_undef);
+		}
+		else if (ch == '<' && inp->lineptr[1] == '<') {
+			inp->lineptr += 2;
+			value <<= expr_compare(inp, no_undef);
+		}
+		else
             return value;
     }
 }
