@@ -372,7 +372,7 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 				if (*inp->lineptr == ':')
 					asm_error(inp, "local scope MACROs not supported");
 				else {
-					struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO);
+					struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO, false);
 					if (sym) {
 						macsym = sym;
 						if (!passno)
@@ -388,7 +388,15 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 			struct symbol *sym = NULL;
 			if (!cond_skipping && label_size) {
 				int scope = *inp->line.str == ':' ? scope_no : SCOPE_GLOBAL;
-				if ((sym = symbol_enter(inp, label_size, scope)) && !passno)
+				if (opsize == 1 && *opname == '=') {
+					if ((sym = symbol_enter(inp, label_size, scope, true))) {
+						list_value = sym->value = expression(inp, true);
+						list_char = '=';
+					}
+					list_line(inp);
+					return act;
+				}
+				if ((sym = symbol_enter(inp, label_size, scope, false)) && !passno)
 					sym->value = org;
 			}
 			if (!strncmp(opname, "IF", opsize))

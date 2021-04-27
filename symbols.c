@@ -31,7 +31,7 @@ int symbol_cmp_ade(const void *a, const void *b)
 }
 
 int (*symbol_cmp)(const void *, const void *) = symbol_cmp_lancs;
-struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size, int scope);
+struct symbol *(*symbol_enter)(struct inctx *inp, size_t label_size, int scope, bool update);
 
 int symbol_parse(struct inctx *inp)
 {
@@ -53,7 +53,7 @@ static void symbol_uppercase(const char *src, size_t label_size, char *dest)
 	*dest = 0;
 }
 
-struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scope)
+struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scope, bool update)
 {
 	struct symbol *sym = malloc(sizeof(struct symbol) + label_size + 1);
 	if (sym) {
@@ -64,6 +64,11 @@ struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scop
 		if (!res)
 			asm_error(inp, "out of memory allocating a symbol");
 		else if (*res != sym) {
+			if (update) {
+				free(*res);
+				*res = sym;
+				return sym;
+			}
 			asm_error(inp, "symbol %s already defined", sym->name);
 			free(sym);
 		}
@@ -74,10 +79,12 @@ struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scop
 			return sym;
 		}
 	}
+	else
+		asm_error(inp, "out of memory allocating a symbol");
 	return NULL;
 }
 
-struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, int scope)
+struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, int scope, bool update)
 {
 	char label[label_size+1];
 	symbol_uppercase(inp->line.str, label_size, label);
@@ -87,9 +94,10 @@ struct symbol *symbol_enter_pass2(struct inctx *inp, size_t label_size, int scop
 	void *node = tfind(&sym, &symbols, symbol_cmp);
 	if (node)
 		return *(struct symbol **)node;
-	else
+	else {
 		asm_error(inp, "symbol %s has disappeared between pass 1 and pass 2", label);
-	return NULL;
+		return NULL;
+	}
 }
 
 struct symbol *symbol_lookup(struct inctx *inp, bool no_undef)

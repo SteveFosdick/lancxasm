@@ -658,6 +658,13 @@ static enum action pseudo_stop(struct inctx *inp, struct symbol *sym)
 	return ACT_STOP;
 }
 
+static enum action pseudo_assign(struct inctx *inp, struct symbol *sym)
+{
+	/* the case with a label is handled in laxasm.c */
+	asm_error(inp, "Assignment (=) needs a label");
+	return ACT_CONTINUE;
+}
+
 struct op_type {
 	char name[8];
 	enum action (*func)(struct inctx *inp, struct symbol *sym);
@@ -708,7 +715,8 @@ static const struct op_type pseudo_ops[] = {
 	{ "TABS",    pseudo_tabs    },
 	{ "TTL",     pseudo_ttl     },
 	{ "UNTIL",   pseudo_until   },
-	{ "WIDTH",   pseudo_width   }
+	{ "WIDTH",   pseudo_width   },
+	{ "=",       pseudo_assign  }
 };
 
 enum action pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym)
