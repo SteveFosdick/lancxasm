@@ -5,7 +5,7 @@
 
 #include "charclass.h"
 
-static void pseudo_equ(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_equ(struct inctx *inp, struct symbol *sym)
 {
 	if (sym) {
 		uint16_t value = expression(inp, passno);
@@ -13,17 +13,19 @@ static void pseudo_equ(struct inctx *inp, struct symbol *sym)
 		list_value = value;
 		list_char = '=';
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_org(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_org(struct inctx *inp, struct symbol *sym)
 {
 	list_value = org = expression(inp, true);
 	list_char = ':';
 	if (sym)
 		sym->value = org;
+	return ACT_CONTINUE;
 }
 
-static void pseudo_asc(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_asc(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
@@ -49,20 +51,23 @@ static void pseudo_asc(struct inctx *inp, struct symbol *sym)
 	}
 	else
 		asm_error(inp, "missing opening quote");
+	return ACT_CONTINUE;
 }
 
-static void pseudo_str(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_str(struct inctx *inp, struct symbol *sym)
 {
 	pseudo_asc(inp, sym);
 	dstr_add_ch(&objcode, '\r');
+	return ACT_CONTINUE;
 }
 
-static void pseudo_dc(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_dc(struct inctx *inp, struct symbol *sym)
 {
 	size_t used = objcode.used;
 	pseudo_asc(inp, sym);
 	if (objcode.used > used)
 		objcode.str[objcode.used-1] |= 0x80;
+	return ACT_CONTINUE;
 }
 
 static void plant_length(struct inctx *inp, size_t posn)
@@ -73,21 +78,23 @@ static void plant_length(struct inctx *inp, size_t posn)
 	objcode.str[posn] = len;
 }
 
-static void pseudo_casc(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_casc(struct inctx *inp, struct symbol *sym)
 {
 	size_t posn = objcode.used;
 	dstr_add_ch(&objcode, 0); /* length to be filled in later */
 	pseudo_asc(inp, sym);
 	plant_length(inp, posn);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_cstr(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_cstr(struct inctx *inp, struct symbol *sym)
 {
 	size_t posn = objcode.used;
 	dstr_add_ch(&objcode, 0); /* length to be filled in later */
 	pseudo_asc(inp, sym);
 	dstr_add_ch(&objcode, '\r');
 	plant_length(inp, posn);
+	return ACT_CONTINUE;
 }
 
 static void plant_bytes(struct inctx *inp, size_t count, uint16_t byte)
@@ -145,27 +152,31 @@ static void plant_data(struct inctx *inp, const char *desc, void (*planter)(stru
 		asm_error(inp, "bad %s expression", desc);
 }
 
-static void pseudo_dfb(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_dfb(struct inctx *inp, struct symbol *sym)
 {
 	plant_data(inp, "byte", plant_bytes);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_dfw(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_dfw(struct inctx *inp, struct symbol *sym)
 {
 	plant_data(inp, "word", plant_words);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_dfdb(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_dfdb(struct inctx *inp, struct symbol *sym)
 {
 	plant_data(inp, "double-byte", plant_dbytes);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_ds(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_ds(struct inctx *inp, struct symbol *sym)
 {
 	plant_bytes(inp, expression(inp, true), 0);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_data(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_data(struct inctx *inp, struct symbol *sym)
 {
 	int ch;
 	do {
@@ -180,6 +191,7 @@ static void pseudo_data(struct inctx *inp, struct symbol *sym)
 	} while (ch == ',');
 	if (ch != '\n' && ch != ';' && ch != '\\' && ch != '*')
 		asm_error(inp, "bad %s expression", "data");
+	return ACT_CONTINUE;
 }
 
 static unsigned hex_nyb(struct inctx *inp, int ch)
@@ -194,28 +206,34 @@ static unsigned hex_nyb(struct inctx *inp, int ch)
 	return 0;
 }
 
-static void pseudo_hex(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_hex(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
 	if (ch == '"' || ch == '\'') {
 		int endq = ch;
 		while ((ch = *++inp->lineptr) != endq && ch != '\n') {
 			unsigned byte = hex_nyb(inp, ch);
+			if (err_message)
+				break;
 			ch = *++inp->lineptr;
 			if (ch == endq || ch == '\n') {
 				plant_bytes(inp, 1, byte << 4);
 				break;
 			}
-			plant_bytes(inp, 1, (byte << 4) | hex_nyb(inp, ch));
+			byte = (byte << 4) | hex_nyb(inp, ch);
+			if (err_message)
+				break;
+			plant_bytes(inp, 1, byte);
 		}
 		if (ch != endq)
 			asm_error(inp, "missing closing quote");
 	}
 	else
 		asm_error(inp, "missing opening quote");
+	return ACT_CONTINUE;
 }
 
-static void pseudo_clst(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_clst(struct inctx *inp, struct symbol *sym)
 {
 	switch(expression(inp, true)) {
 		case 0:
@@ -227,9 +245,10 @@ static void pseudo_clst(struct inctx *inp, struct symbol *sym)
 		case 2:
 			list_opts |= LISTO_ALLCODE|LISTO_CODEFILE;
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_lst(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_lst(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
 	if (ch == 'O' || ch == 'o') {
@@ -237,14 +256,14 @@ static void pseudo_lst(struct inctx *inp, struct symbol *sym)
 		if (ch == 'N' || ch == 'n') {
 			/* LST ON */
 			list_opts |= LISTO_ENABLED|LISTO_MACRO;
-			return;
+			return ACT_CONTINUE;
 		}
 		else if (ch == 'F' || ch == 'f') {
 			ch = inp->lineptr[2];
 			if (ch == 'F' || ch == 'f') {
 				/* LST OFF */
 				list_opts &= ~LISTO_ENABLED;
-				return;
+				return ACT_CONTINUE;
 			}
 		}
 	}
@@ -257,7 +276,7 @@ static void pseudo_lst(struct inctx *inp, struct symbol *sym)
 				if (ch == 'L' || ch == 'l') {
 					/* LST FULL */
 					list_opts = (list_opts & ~LISTO_MACRO)|LISTO_ENABLED;
-					return;
+					return ACT_CONTINUE;
 				}
 			}
 		}
@@ -277,18 +296,20 @@ static void pseudo_lst(struct inctx *inp, struct symbol *sym)
 				list_opts = (list_opts & ~LISTO_MACRO)|LISTO_ENABLED;
 		}
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_listo(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_listo(struct inctx *inp, struct symbol *sym)
 {
 	if (passno ) {
 		int value = expression(inp, true);
 		if (!err_message)
 			list_opts ^= value & 0x1ff;
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_dsect(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_dsect(struct inctx *inp, struct symbol *sym)
 {
 	if (in_dsect)
 		asm_error(inp, "dsect cannot be nested");
@@ -297,9 +318,10 @@ static void pseudo_dsect(struct inctx *inp, struct symbol *sym)
 		org = org_dsect;
 		in_dsect = true;
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_dend(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_dend(struct inctx *inp, struct symbol *sym)
 {
 	if (in_dsect) {
 		org_dsect = org;
@@ -308,6 +330,7 @@ static void pseudo_dend(struct inctx *inp, struct symbol *sym)
 	}
 	else
 		asm_error(inp, "dend without dsect");
+	return ACT_CONTINUE;
 }
 
 static FILE *parse_open(struct inctx *inp, struct dstring *fn, const char *mode)
@@ -322,7 +345,7 @@ static FILE *parse_open(struct inctx *inp, struct dstring *fn, const char *mode)
 	return fopen(fn->str, mode);
 }
 
-static void pseudo_chn(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_chn(struct inctx *inp, struct symbol *sym)
 {
 	struct dstring filename;
 	FILE *fp = parse_open(inp, &filename, "r");
@@ -336,6 +359,7 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 			ctx->fp = fp;
 			ctx->name = filename.str;
 			ctx->lineno = 1;
+			return ACT_CONTINUE;
 		}
 		else {
 			fclose(fp);
@@ -346,10 +370,12 @@ static void pseudo_chn(struct inctx *inp, struct symbol *sym)
 		asm_error(inp, "unable to open chained file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
 		free(filename.str);
 	}
+	return ACT_STOP;
 }
 
-static void pseudo_include(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_include(struct inctx *inp, struct symbol *sym)
 {
+	enum action act = ACT_CONTINUE;
 	struct dstring filename;
 	FILE *fp = parse_open(inp, &filename, "r");
 	if (fp) {
@@ -360,13 +386,17 @@ static void pseudo_include(struct inctx *inp, struct symbol *sym)
 		incfile.whence = 'I';
 		asm_file(&incfile);
 	}
-	else
+	else {
 		asm_error(inp, "unable to open include file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
+		act = ACT_STOP;
+	}
 	free(filename.str);
+	return act;
 }
 
-static void pseudo_code(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_code(struct inctx *inp, struct symbol *sym)
 {
+	enum action act = ACT_CONTINUE;
 	struct dstring filename;
 	FILE *fp = parse_open(inp, &filename, "rb");
 	if (fp) {
@@ -378,11 +408,14 @@ static void pseudo_code(struct inctx *inp, struct symbol *sym)
 			objcode.used = size;
 			codefile = true;
 		}
-		else
+		else {
 			asm_error(inp, "read error on code file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
+			act = ACT_STOP;
+		}
 		fclose(fp);
 	}
 	free(filename.str);
+	return act;
 }
 
 static const char *simple_str(struct inctx *inp, int ch)
@@ -398,7 +431,7 @@ static const char *simple_str(struct inctx *inp, int ch)
 	return end + 1;
 }
 
-static void pseudo_query(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_query(struct inctx *inp, struct symbol *sym)
 {
 	if (!passno && !err_message) {
 		int ch = non_space(inp);
@@ -430,7 +463,7 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 							sym->value = value;
 							list_value = value;
 							list_char = '=';
-							return;
+							return ACT_CONTINUE;
 						}
 					}
 				}
@@ -439,24 +472,28 @@ static void pseudo_query(struct inctx *inp, struct symbol *sym)
 				free(qtx.line.str);
 		}
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_endm(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_endm(struct inctx *inp, struct symbol *sym)
 {
 	asm_error(inp, "no macro is being defined");
+	return ACT_CONTINUE;
 }
 
-static void pseudo_lfcond(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_lfcond(struct inctx *inp, struct symbol *sym)
 {
 	list_opts &= ~LISTO_SKIPPED;
+	return ACT_CONTINUE;
 }
 
-static void pseudo_sfcond(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_sfcond(struct inctx *inp, struct symbol *sym)
 {
 	list_opts |= LISTO_SKIPPED;
+	return ACT_CONTINUE;
 }
 
-static void pseudo_page(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_page(struct inctx *inp, struct symbol *sym)
 {
 	page_len = expression(inp, true);
 	int ch = non_space(inp);
@@ -464,9 +501,10 @@ static void pseudo_page(struct inctx *inp, struct symbol *sym)
 		++inp->lineptr;
 		page_width = expression(inp, true);
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_skp(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_skp(struct inctx *inp, struct symbol *sym)
 {
 	if (page_len) {
 		int ch = non_space(inp);
@@ -475,21 +513,24 @@ static void pseudo_skp(struct inctx *inp, struct symbol *sym)
 		else
 			cur_line += expression(inp, true);
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_ttl(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_ttl(struct inctx *inp, struct symbol *sym)
 {
 	const char *end = simple_str(inp, non_space(inp));
 	title.used = 0;
 	dstr_add_bytes(&title, inp->lineptr, end - inp->lineptr);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_width(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_width(struct inctx *inp, struct symbol *sym)
 {
 	page_width = expression(inp, true);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_disp(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_disp(struct inctx *inp, struct symbol *sym)
 {
 	const char *end = simple_str(inp, non_space(inp));
 	if (end > inp->lineptr) {
@@ -520,21 +561,24 @@ static void pseudo_disp(struct inctx *inp, struct symbol *sym)
 			fwrite(start, end - start, 1, stdout);
 		putc('\n', stdout);
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_disp1(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_disp1(struct inctx *inp, struct symbol *sym)
 {
 	if (!passno)
 		pseudo_disp(inp, sym);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_disp2(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_disp2(struct inctx *inp, struct symbol *sym)
 {
 	if (passno)
 		pseudo_disp(inp, sym);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_tabs(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_tabs(struct inctx *inp, struct symbol *sym)
 {
 	int ch = non_space(inp);
 	if (ch == '\n' || ch == ';' || ch == '\\' || ch == '*')
@@ -555,34 +599,61 @@ static void pseudo_tabs(struct inctx *inp, struct symbol *sym)
 				tab_stops[tab++] = 0;
 		}
 	}
+	return ACT_CONTINUE;
 }
 
-static void pseudo_load(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_load(struct inctx *inp, struct symbol *sym)
 {
 	if (passno)
 		load_addr = expression(inp, true);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_exec(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_exec(struct inctx *inp, struct symbol *sym)
 {
 	if (passno)
 		exec_addr = expression(inp, true);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_msw(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_msw(struct inctx *inp, struct symbol *sym)
 {
 	if (passno)
 		addr_msw = expression(inp, true);
+	return ACT_CONTINUE;
 }
 
-static void pseudo_block(struct inctx *inp, struct symbol *sym)
+static enum action pseudo_block(struct inctx *inp, struct symbol *sym)
 {
 	++scope_no;
+	return ACT_CONTINUE;
+}
+
+static enum action pseudo_repeat(struct inctx *inp, struct symbol *sym)
+{
+	if (inp->rpt_line) {
+		asm_error(inp, "REPEAT does not nest (in a single input context)");
+		return ACT_CONTINUE;
+	}
+	inp->rpt_line = inp->lineno;
+	return ACT_RMARK;
+}
+
+static enum action pseudo_until(struct inctx *inp, struct symbol *sym)
+{
+	if (inp->rpt_line) {
+		int value = expression(inp, true);
+		if (!value && !err_message)
+			return ACT_RBACK;
+	}
+	else
+		asm_error(inp, "Not REPEATING (UNTIL without REPEAT)");
+	return ACT_CONTINUE;
 }
 
 struct op_type {
 	char name[8];
-	void (*func)(struct inctx *inp, struct symbol *sym);
+	enum action (*func)(struct inctx *inp, struct symbol *sym);
 };
 
 static const struct op_type pseudo_ops[] = {
@@ -622,23 +693,23 @@ static const struct op_type pseudo_ops[] = {
 	{ "ORG",     pseudo_org     },
 	{ "PAGE",    pseudo_page    },
 	{ "QUERY",   pseudo_query   },
+	{ "REPEAT",  pseudo_repeat  },
 	{ "SFCOND",  pseudo_sfcond  },
 	{ "SKP",     pseudo_skp     },
 	{ "STR",     pseudo_str     },
 	{ "TABS",    pseudo_tabs    },
 	{ "TTL",     pseudo_ttl     },
+	{ "UNTIL",   pseudo_until   },
 	{ "WIDTH",   pseudo_width   }
 };
 
-bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym)
+enum action pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym)
 {
 	const struct op_type *ptr = pseudo_ops;
 	const struct op_type *end = pseudo_ops + sizeof(pseudo_ops) / sizeof(struct op_type);
 	while (ptr < end) {
-		if (!strcmp(opname, ptr->name)) {
-			ptr->func(inp, sym);
-			return true;
-		}
+		if (!strcmp(opname, ptr->name))
+			return ptr->func(inp, sym);
 		++ptr;
 	}
 	if (!strncmp(opname, "SYS", 3)) {
@@ -646,8 +717,8 @@ bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symb
 		if (!strcmp(tail, "CLI") || !strcmp(tail, "FX") || !strcmp(tail, "VDU") || !strcmp(tail, "VDU1") || !strcmp(tail, "VDU2")) {
 			if (!passno)
 				fprintf(stderr, "%s:%u:%d: warning: directive %s ignored\n", inp->name, inp->lineno, (int)(inp->lineptr - inp->line.str), opname);
-			return true;
+			return ACT_CONTINUE;
 		}
 	}
-	return false;
+	return ACT_NOTFOUND;
 }

@@ -176,7 +176,7 @@ static void list_line(struct inctx *inp)
 	}
 }
 
-static void asm_macdef(struct inctx *inp, int ch, size_t label_size)
+static enum action asm_macdef(struct inctx *inp, int ch, size_t label_size)
 {
 	/* defining a MACRO - check for the end marker */
 	const char *p = inp->lineptr;
@@ -207,6 +207,7 @@ static void asm_macdef(struct inctx *inp, int ch, size_t label_size)
 			asm_error(inp, "out of memory defining macro %s", macsym->name);
 	}
 	list_line(inp);
+	return ACT_CONTINUE;
 }
 
 static void asm_macparse(struct inctx *inp, char *params[10])
@@ -227,9 +228,9 @@ static void asm_macparse(struct inctx *inp, char *params[10])
 		params[++pno] = inp->lineptr;
 }
 
-static void asm_line(struct inctx *inp);
+static enum action asm_line(struct inctx *inp);
 
-static void asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10], const char *at)
+static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10], const char *at)
 {
 	const char *start = ml->text;
 	const char *end = start + ml->length;
@@ -258,7 +259,7 @@ static void asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10]
 	if (start < end)
 		dstr_add_bytes(&mtx->line, start, end - start);
 	mtx->lineptr = mtx->line.str;
-	asm_line(mtx);
+	return asm_line(mtx);
 }
 
 static void asm_macexpand(struct inctx *inp, struct symbol *mac)
@@ -284,18 +285,25 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 
 		/* step through each line */
 		for (struct macline *ml = mac->macro; ml; ml = ml->next) {
+			enum action act;
 			/* does the line have args to be subsitited? */
 			const char *at = memchr(ml->text, '@', ml->length);
 			if (at)
-				asm_macsubst(&mtx, ml, params, at);
+				act = asm_macsubst(&mtx, ml, params, at);
 			else {
 				/* no, avoid a copy */
 				char *save = mtx.line.str;
 				mtx.line.str = mtx.lineptr = ml->text;
 				mtx.line.used = ml->length;
-				asm_line(&mtx);
+				act = asm_line(&mtx);
 				mtx.line.str = save;
 			}
+			if (act == ACT_STOP)
+				break;
+			else if (act == ACT_RMARK)
+				inp->mpos = ml;
+			else if (act == ACT_RBACK)
+				ml = inp->mpos;
 		}
 		if (mtx.line.allocated)
 			free(mtx.line.str);
@@ -337,8 +345,9 @@ static void asm_if(struct inctx *inp, int iftype)
 	list_line(inp);
 }
 
-static void asm_operation(struct inctx *inp, int ch, size_t label_size)
+static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 {
+	enum action act = ACT_CONTINUE;
 	if (asm_isendchar(ch))
 		list_line(inp);
 	else {
@@ -402,25 +411,32 @@ static void asm_operation(struct inctx *inp, int ch, size_t label_size)
 					cond_skipping = cond_stack[--cond_level];
 				list_line(inp);
 			}
-			else if (cond_skipping || (opsize == 3 && m6502_op(inp, opname)) || pseudo_op(inp, opname, opsize, sym))
+			else if (cond_skipping || (opsize == 3 && m6502_op(inp, opname)))
 				list_line(inp);
 			else {
-				struct symbol sym;
-				sym.scope = SCOPE_MACRO;
-				sym.name = opname;
-				struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
-				if (node)
-					asm_macexpand(inp, *node);
-				else {
-					asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
-					list_line(inp);
+				act = pseudo_op(inp, opname, opsize, sym);
+				if (act == ACT_NOTFOUND) {
+					/* Not a pseudo-op, is it a MACRO? */
+					struct symbol sym;
+					sym.scope = SCOPE_MACRO;
+					sym.name = opname;
+					struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
+					if (node)
+						asm_macexpand(inp, *node);
+					else {
+						asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+						list_line(inp);
+					}
 				}
+				else
+					list_line(inp);
 			}
 		}
 	}
+	return act;
 }
 
-static void asm_line(struct inctx *inp)
+static enum action asm_line(struct inctx *inp)
 {
 	list_value = org;
 	list_char = ':';
@@ -438,20 +454,23 @@ static void asm_line(struct inctx *inp)
 				++inp->lineptr;
 			else if (!asm_isspace(ch) && !asm_isendchar(ch)) {
 				asm_error(inp, "invalid character in label");
-				return;
+				list_line(inp);
+				return ACT_CONTINUE;
 			}
 		}
 		else if (!asm_isspace(ch) && !asm_isendchar(ch)) {
 			asm_error(inp, "labels must start with a letter");
-			return;
+			list_line(inp);
+			return ACT_CONTINUE;
 		}
 	}
 	ch = non_space(inp);
+	enum action act;
 
 	if (macsym)
-		asm_macdef(inp, ch, label_size);
+		act = asm_macdef(inp, ch, label_size);
 	else
-		asm_operation(inp, ch, label_size);
+		act = asm_operation(inp, ch, label_size);
 
 	if (err_message) {
 		free(err_message);
@@ -464,12 +483,15 @@ static void asm_line(struct inctx *inp)
 			fwrite(objcode.str, objcode.used, 1, obj_fp);
 		objcode.used = 0;
 	}
+	return act;
 }
 
-void asm_file(struct inctx *inp)
+enum action asm_file(struct inctx *inp)
 {
+	enum action act = ACT_CONTINUE;
 	inp->lineno = 1;
 	inp->line.used = 0;
+	inp->rpt_line = 0;
 	/* Read the first line one character at a time to detect the
 	 * line ending in use.
 	 */
@@ -485,17 +507,31 @@ void asm_file(struct inctx *inp)
 		} while (ch != EOF);
 
 		inp->lineptr = inp->line.str;
-		asm_line(inp);
+		act = asm_line(inp);
 		if (ch != EOF) {
 			/* Switch to line at a time with new delimiter */
-			while (dstr_getdelim(&inp->line, ch, inp->fp) >= 0) {
+			while (act != ACT_STOP) {
+				switch(act) {
+					case ACT_RMARK:
+						fgetpos(inp->fp, &inp->fposn);
+						break;
+					case ACT_RBACK:
+						fsetpos(inp->fp, &inp->fposn);
+						inp->lineno = inp->rpt_line;
+						break;
+					default:
+						break;
+				}
+				if (dstr_getdelim(&inp->line, ch, inp->fp) < 0)
+					break;
 				++inp->lineno;
 				inp->lineptr = inp->line.str;
-				asm_line(inp);
+				act = asm_line(inp);
 			}
 		}
 	}
 	fclose(inp->fp);
+	return act;
 }
 
 static void asm_pass(int argc, char **argv, struct inctx *inp)

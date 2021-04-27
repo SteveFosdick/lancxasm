@@ -21,6 +21,12 @@
 #define LISTO_SKIPPED  0x080
 #define LISTO_ENABLED  0x100
 
+struct macline {
+	struct macline *next;
+	size_t length;
+	char text[1];
+};
+
 struct inctx {
 	struct inctx *parent;
 	FILE *fp;
@@ -29,12 +35,19 @@ struct inctx {
 	struct dstring line;
 	char *lineptr;
 	char whence;
+	unsigned rpt_line;
+	union {
+		fpos_t fposn;
+		struct macline *mpos;
+	};
 };
 
-struct macline {
-	struct macline *next;
-	size_t length;
-	char text[1];
+enum action {
+	ACT_CONTINUE,
+	ACT_NOTFOUND,
+	ACT_RMARK,
+	ACT_RBACK,
+	ACT_STOP
 };
 
 #define SCOPE_MACRO  0
@@ -64,7 +77,7 @@ extern struct symbol *macsym;
 
 __attribute__((format (printf, 2, 3)))
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
-extern void asm_file(struct inctx *inp);
+extern enum action asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);
 
 /* symbols.c */
@@ -87,7 +100,7 @@ extern int expression(struct inctx *inp, bool no_undef);
 extern bool m6502_op(struct inctx *inp, const char *opname);
 
 /* pseudo.c */
-extern bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym);
+extern enum action pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym);
 
 #endif
 
