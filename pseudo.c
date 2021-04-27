@@ -651,6 +651,13 @@ static enum action pseudo_until(struct inctx *inp, struct symbol *sym)
 	return ACT_CONTINUE;
 }
 
+static enum action pseudo_stop(struct inctx *inp, struct symbol *sym)
+{
+	const char *end = simple_str(inp, non_space(inp));
+	asm_error(inp, "STOP: %.*s", (int)(end - inp->lineptr), inp->lineptr);
+	return ACT_STOP;
+}
+
 struct op_type {
 	char name[8];
 	enum action (*func)(struct inctx *inp, struct symbol *sym);
@@ -696,6 +703,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "REPEAT",  pseudo_repeat  },
 	{ "SFCOND",  pseudo_sfcond  },
 	{ "SKP",     pseudo_skp     },
+	{ "STOP",    pseudo_stop    },
 	{ "STR",     pseudo_str     },
 	{ "TABS",    pseudo_tabs    },
 	{ "TTL",     pseudo_ttl     },
