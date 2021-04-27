@@ -3,7 +3,7 @@
 
 static int expr_term(struct inctx *inp, bool no_undef)
 {
-    int value, ch = *inp->lineptr;
+    int value, ch = non_space(inp);
     if (ch == '*') {
 		value = org;
 		++inp->lineptr;
@@ -57,7 +57,7 @@ static int expr_term(struct inctx *inp, bool no_undef)
 
 static int expr_bracket(struct inctx *inp, bool no_undef)
 {
-	int ch = *inp->lineptr;
+	int ch = non_space(inp);
     if (ch == '(') {
         ++inp->lineptr;
         int value = expression(inp, no_undef);
@@ -73,7 +73,7 @@ static int expr_bracket(struct inctx *inp, bool no_undef)
 
 static int expr_unary(struct inctx *inp, bool no_undef)
 {
-    int ch = *inp->lineptr;
+    int ch = non_space(inp);
     if (ch == '-') {
         ++inp->lineptr;
         return -expr_bracket(inp, no_undef);
