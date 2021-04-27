@@ -641,5 +641,13 @@ bool pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symb
 		}
 		++ptr;
 	}
+	if (!strncmp(opname, "SYS", 3)) {
+		const char *tail = opname + 3;
+		if (!strcmp(tail, "CLI") || !strcmp(tail, "FX") || !strcmp(tail, "VDU") || !strcmp(tail, "VDU1") || !strcmp(tail, "VDU2")) {
+			if (!passno)
+				fprintf(stderr, "%s:%u:%d: warning: directive %s ignored\n", inp->name, inp->lineno, (int)(inp->lineptr - inp->line.str), opname);
+			return true;
+		}
+	}
 	return false;
 }

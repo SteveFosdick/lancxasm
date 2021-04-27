@@ -570,6 +570,9 @@ This assembler does not, at present, implement any feature that causes
 the same statement to have to processed more than once within the same
 pass so there there are no REPEAT  or WHILE loops and no GOTO.
 
+The directives _SYSCLI_, _SYSFX_, _SYSVDU_, _SYSVDU1_ and _SYSVDU2_ are
+recognised but do nothing except cause a warning to be issued.
+
 ### With the Lancaster Assembler.
 
 LaXasm does not implement the Lancaster "Assemble Time Variables"
@@ -606,4 +609,4 @@ The following directives, implemented by ADE+ and not by the Lancaster
 Assembler, are **NOT** implemented in LaXasm: _ASECT_, _EMBED_,
 _END_, _ENT_, _EXT_, _EXZ_, _GEQU_, _GET_, _LLST_, _MACLIB_, _MODULE_,
 _MSB_, _NOLIB_, _OBJ_, _OPT_, _PAUSE_, _QSTR_, _REPEAT_, _RESUME_,
-_RSECT_, _RZP_, _SYSFX_, _UNTIL_, _WEND_, _WHILE_
+_RSECT_, _RZP_, _UNTIL_, _WEND_, _WHILE_
