@@ -7,16 +7,20 @@
 __attribute__((noreturn))
 static void dstr_nomem(size_t bytes)
 {
-	fprintf(stderr, "lancasm: Out of memory trying to allocate %lu bytes\n", (unsigned long)bytes);
+	fprintf(stderr, "laxasm: Out of memory trying to allocate %lu bytes\n", (unsigned long)bytes);
 	abort();
 }
 
 void dstr_empty(struct dstring *dstr, size_t bytes)
 {
-	if (bytes < MIN_SIZE)
-		bytes = MIN_SIZE;
-	if (!(dstr->str = malloc(bytes)))
-		dstr_nomem(bytes);
+	char *str = NULL;
+	if (bytes > 0) {
+		if (bytes < MIN_SIZE)
+			bytes = MIN_SIZE;
+		if (!(str = malloc(bytes)))
+			dstr_nomem(bytes);
+	}
+	dstr->str = str;
 	dstr->used = 0;
 	dstr->allocated = bytes;
 }
@@ -88,7 +92,7 @@ ssize_t dstr_getdelim(struct dstring *dstr, int delim, FILE *fp)
 				*ww++ = '\t';
 				ww = memchr(ww, 0xdd, end - ww);
 			} while (ww);
-		}	
+		}
 	}
 	dstr->used = bytes;
 	return bytes;

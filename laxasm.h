@@ -28,18 +28,20 @@ struct macline {
 };
 
 struct inctx {
-	struct inctx *parent;
-	FILE *fp;
-	const char *name;
-	unsigned lineno;
 	struct dstring line;
-	char *lineptr;
-	char whence;
-	unsigned rpt_line;
+	struct dstring wcond;
 	union {
 		fpos_t fposn;
 		struct macline *mpos;
 	};
+	struct inctx *parent;
+	FILE *fp;
+	const char *name;
+	char *lineptr;
+	unsigned lineno;
+	unsigned rpt_line;
+	char whence;
+	char wend_skipping;
 };
 
 enum action {
@@ -79,6 +81,7 @@ __attribute__((format (printf, 2, 3)))
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
 extern enum action asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);
+extern void dump_ictx(struct inctx *inp, const char *when);
 
 /* symbols.c */
 extern void *symbols;

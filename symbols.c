@@ -65,9 +65,8 @@ struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scop
 			asm_error(inp, "out of memory allocating a symbol");
 		else if (*res != sym) {
 			if (update) {
-				free(*res);
-				*res = sym;
-				return sym;
+				free(sym);
+				return *res;
 			}
 			asm_error(inp, "symbol %s already defined", sym->name);
 			free(sym);

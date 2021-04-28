@@ -17,7 +17,7 @@ unsigned passno, scope_no, list_opts = 0;
 unsigned page_len = 66, page_width = 132, cur_page, cur_line, tab_stops[MAX_TAB_STOPS];
 const unsigned default_tabs[MAX_TAB_STOPS] = { 8, 16, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 115, 123 };
 uint16_t org, org_code, org_dsect, list_value, load_addr = 0, exec_addr = 0, addr_msw = 0;
-bool no_cmos = false, in_dsect, in_ds, codefile, cond_skipping;
+bool no_cmos = false, in_dsect, in_ds, codefile, cond_skipping, wend_skipping;
 struct dstring objcode, title;
 struct symbol *macsym = NULL;
 
@@ -103,76 +103,79 @@ static void list_extra(struct inctx *inp)
 
 static void list_line(struct inctx *inp)
 {
-	if (passno && list_fp && !(cond_skipping && (list_opts & LISTO_SKIPPED))) {
-		if (list_opts & LISTO_ENABLED && !(list_opts & LISTO_MACRO && inp->whence == 'M')) {
-			list_pagecheck(inp);
-			uint8_t *bytes = (uint8_t *)objcode.str;
-			switch(objcode.used) {
-				case 0:
-					fprintf(list_fp, "%04X%c          ", list_value & 0xffff, list_char);
-					break;
-				case 1:
-					fprintf(list_fp, "%04X%c %02X       ", list_value & 0xffff, list_char, bytes[0]);
-					break;
-				case 2:
-					fprintf(list_fp, "%04X%c %02X %02X    ", list_value & 0xffff, list_char, bytes[0], bytes[1]);
-					break;
-				default:
-					fprintf(list_fp, "%04X%c %02X %02X %02X ", list_value & 0xffff, list_char, bytes[0], bytes[1], bytes[2]);
-					break;
-			}
-			putc(cond_skipping ? 'S' : inp->whence, list_fp);
-			if (!(list_opts & LISTO_LINE))
-				fprintf(list_fp, "%5u", inp->lineno);
-			if (*inp->line.str == '\n')
-				 putc('\n', list_fp);
-			else {
-				putc(' ', list_fp);
-				putc(' ', list_fp);
-				unsigned col = 1;
-				const char *ptr = inp->line.str;
-				size_t remain = inp->line.used;
-				const char *tab = memchr(ptr, '\t', remain);
-				if (tab) {
-					int tab_no = 0;
-					do {
-						size_t chars = tab - ptr;
-						fwrite(ptr, chars, 1, list_fp);
-						col += chars;
-						unsigned tab_posn = 0;
-						while (tab_no < MAX_TAB_STOPS) {
-							tab_posn = tab_stops[tab_no];
-							if (tab_posn > col || tab_posn == 0)
-								break;
-							++tab_no;
-						}
-						if (tab_posn == 0) {
-							putc(' ', list_fp);
-							col++;
-						}
-						else {
-							while (col < tab_posn) {
-								putc(' ', list_fp);
-								++col;
-							}
-							++tab_no;
-						}
-						ptr = tab + 1;
-						remain -= chars + 1;
-						tab = memchr(ptr, '\t', remain);
-					}
-					while (tab);
+	if (passno && list_fp) {
+		bool skipping = cond_skipping || inp->wend_skipping;
+		if (err_message || !(skipping && (list_opts & LISTO_SKIPPED))) {
+			if (list_opts & LISTO_ENABLED && !(list_opts & LISTO_MACRO && inp->whence == 'M')) {
+				list_pagecheck(inp);
+				uint8_t *bytes = (uint8_t *)objcode.str;
+				switch(objcode.used) {
+					case 0:
+						fprintf(list_fp, "%04X%c          ", list_value & 0xffff, list_char);
+						break;
+					case 1:
+						fprintf(list_fp, "%04X%c %02X       ", list_value & 0xffff, list_char, bytes[0]);
+						break;
+					case 2:
+						fprintf(list_fp, "%04X%c %02X %02X    ", list_value & 0xffff, list_char, bytes[0], bytes[1]);
+						break;
+					default:
+						fprintf(list_fp, "%04X%c %02X %02X %02X ", list_value & 0xffff, list_char, bytes[0], bytes[1], bytes[2]);
+						break;
 				}
-				if (remain > 0)
-					fwrite(ptr, remain, 1, list_fp);
+				putc(skipping ? 'S' : inp->whence, list_fp);
+				if (!(list_opts & LISTO_LINE))
+					fprintf(list_fp, "%5u", inp->lineno);
+				if (*inp->line.str == '\n')
+					 putc('\n', list_fp);
+				else {
+					putc(' ', list_fp);
+					putc(' ', list_fp);
+					unsigned col = 1;
+					const char *ptr = inp->line.str;
+					size_t remain = inp->line.used;
+					const char *tab = memchr(ptr, '\t', remain);
+					if (tab) {
+						int tab_no = 0;
+						do {
+							size_t chars = tab - ptr;
+							fwrite(ptr, chars, 1, list_fp);
+							col += chars;
+							unsigned tab_posn = 0;
+							while (tab_no < MAX_TAB_STOPS) {
+								tab_posn = tab_stops[tab_no];
+								if (tab_posn > col || tab_posn == 0)
+									break;
+								++tab_no;
+							}
+							if (tab_posn == 0) {
+								putc(' ', list_fp);
+								col++;
+							}
+							else {
+								while (col < tab_posn) {
+									putc(' ', list_fp);
+									++col;
+								}
+								++tab_no;
+							}
+							ptr = tab + 1;
+							remain -= chars + 1;
+							tab = memchr(ptr, '\t', remain);
+						}
+						while (tab);
+					}
+					if (remain > 0)
+						fwrite(ptr, remain, 1, list_fp);
+				}
 			}
+			if (err_message) {
+				list_pagecheck(inp);
+				fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
+			}
+			if (objcode.used > 3 && (list_opts & LISTO_ALLCODE) && (!codefile || (list_opts & LISTO_CODEFILE)))
+				list_extra(inp);
 		}
-		if (err_message) {
-			list_pagecheck(inp);
-			fprintf(list_fp, "+++ERROR at character %d: %s\n", err_column, err_message);
-		}
-		if (objcode.used > 3 && (list_opts & LISTO_ALLCODE) && (!codefile || (list_opts & LISTO_CODEFILE)))
-			list_extra(inp);
 	}
 }
 
@@ -275,13 +278,16 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 
 		/* Set up an input context for this macro */
 		struct inctx mtx;
+		dstr_empty(&mtx.line, 0);
+		dstr_empty(&mtx.wcond, 0);
 		mtx.parent = inp;
 		mtx.fp = NULL;
 		mtx.name = inp->name;
 		mtx.lineno = inp->lineno;
-		mtx.line.str = NULL;
-		mtx.line.allocated = 0;
 		mtx.whence = 'M';
+		mtx.wcond.used = 0;
+		mtx.rpt_line = 0;
+		mtx.wend_skipping = false;
 
 		/* step through each line */
 		for (struct macline *ml = mac->macro; ml; ml = ml->next) {
@@ -301,12 +307,14 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 			if (act == ACT_STOP)
 				break;
 			else if (act == ACT_RMARK)
-				inp->mpos = ml;
+				mtx.mpos = ml;
 			else if (act == ACT_RBACK)
-				ml = inp->mpos;
+				ml = mtx.mpos;
 		}
 		if (mtx.line.allocated)
 			free(mtx.line.str);
+		if (mtx.wcond.allocated)
+			free(mtx.wcond.str);
 		if (save_mac_expand)
 			mac_no = save_mac_no;
 		mac_expand = save_mac_expand;
@@ -345,6 +353,30 @@ static void asm_if(struct inctx *inp, int iftype)
 	list_line(inp);
 }
 
+static enum action asm_wend(struct inctx *inp)
+{
+	if (inp->wend_skipping)
+		inp->wend_skipping = false;
+	else if (inp->rpt_line) {
+		if (inp->wcond.used) {
+			struct inctx wctx;
+			wctx.name = inp->name;
+			wctx.lineno = inp->rpt_line;
+			wctx.lineptr = inp->wcond.str;
+			int value = expression(&wctx, true);
+			if (value)
+				return ACT_RBACK;
+			inp->wcond.used = 0;
+			inp->rpt_line = 0;
+		}
+		else
+			asm_error(inp, "Expected UNTIL, to match REPEAT, not WEND");
+	}
+	else
+		asm_error(inp, "WEND without WHILE");
+	return ACT_CONTINUE;
+}
+
 static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 {
 	enum action act = ACT_CONTINUE;
@@ -365,7 +397,8 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 				ch &= 0xdf;
 			*--nptr = ch;
 		}
-		if (!cond_skipping && !strncmp(opname, "MACRO", opsize)) {
+		bool skipping = cond_skipping || inp->wend_skipping;
+		if (!skipping && !strncmp(opname, "MACRO", opsize)) {
 			if (macsym)
 				asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
 			else if (label_size) {
@@ -386,11 +419,13 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 		}
 		else {
 			struct symbol *sym = NULL;
-			if (!cond_skipping && label_size) {
+			if (!skipping && label_size) {
 				int scope = *inp->line.str == ':' ? scope_no : SCOPE_GLOBAL;
 				if (opsize == 1 && *opname == '=') {
 					if ((sym = symbol_enter(inp, label_size, scope, true))) {
-						list_value = sym->value = expression(inp, true);
+						uint16_t value = expression(inp, passno);
+						sym->value = value;
+						list_value = value;
 						list_char = '=';
 					}
 					list_line(inp);
@@ -419,7 +454,11 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 					cond_skipping = cond_stack[--cond_level];
 				list_line(inp);
 			}
-			else if (cond_skipping || (opsize == 3 && m6502_op(inp, opname)))
+			else if (!strncmp(opname, "WEND", opsize)) {
+				act = asm_wend(inp);
+				list_line(inp);
+			}
+			else if (cond_skipping || inp->wend_skipping || (opsize == 3 && m6502_op(inp, opname)))
 				list_line(inp);
 			else {
 				act = pseudo_op(inp, opname, opsize, sym);
@@ -499,12 +538,15 @@ enum action asm_file(struct inctx *inp)
 	enum action act = ACT_CONTINUE;
 	inp->lineno = 1;
 	inp->line.used = 0;
+	inp->wcond.used = 0;
 	inp->rpt_line = 0;
+	inp->wend_skipping = false;
 	/* Read the first line one character at a time to detect the
 	 * line ending in use.
 	 */
 	int ch = getc(inp->fp);
 	if (ch != EOF) {
+		fpos_t fcopy;
 		do {
 			if (ch == '\r' || ch == '\n') {
 				dstr_add_ch(&inp->line, '\n');
@@ -521,10 +563,13 @@ enum action asm_file(struct inctx *inp)
 			while (act != ACT_STOP) {
 				switch(act) {
 					case ACT_RMARK:
+						printf("pass %d: file: marking\n", passno);
 						fgetpos(inp->fp, &inp->fposn);
+						fcopy = inp->fposn;
 						break;
 					case ACT_RBACK:
-						fsetpos(inp->fp, &inp->fposn);
+						printf("pass %d: back-tracking, %d\n", passno, memcmp(&fcopy, &inp->fposn, sizeof(fcopy)));
+						fsetpos(inp->fp, &fcopy);
 						inp->lineno = inp->rpt_line;
 						break;
 					default:
@@ -536,6 +581,7 @@ enum action asm_file(struct inctx *inp)
 				inp->lineptr = inp->line.str;
 				act = asm_line(inp);
 			}
+			printf("act=%d\n", act);
 		}
 	}
 	fclose(inp->fp);
@@ -633,6 +679,7 @@ int main(int argc, char **argv)
 		infile.parent = NULL;
 		infile.whence = ' ';
 		dstr_empty(&infile.line, MIN_LINE);
+		dstr_empty(&infile.wcond, 0);
 		dstr_empty(&objcode, MIN_LINE);
 		if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
 			fprintf(stderr, "laxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));

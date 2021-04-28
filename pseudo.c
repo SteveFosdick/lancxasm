@@ -375,16 +375,22 @@ static enum action pseudo_chn(struct inctx *inp, struct symbol *sym)
 
 static enum action pseudo_include(struct inctx *inp, struct symbol *sym)
 {
-	enum action act = ACT_CONTINUE;
+	enum action act;
 	struct dstring filename;
 	FILE *fp = parse_open(inp, &filename, "r");
 	if (fp) {
 		struct inctx incfile;
+		dstr_empty(&incfile.line, MIN_LINE);
+		dstr_empty(&incfile.wcond, 0);
 		incfile.parent = inp;
 		incfile.fp = fp;
 		incfile.name = filename.str;
 		incfile.whence = 'I';
-		asm_file(&incfile);
+		act = asm_file(&incfile);
+		if (incfile.line.allocated)
+			free(incfile.line.str);
+		if (incfile.wcond.allocated)
+			free(incfile.wcond.str);
 	}
 	else {
 		asm_error(inp, "unable to open include file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
@@ -632,7 +638,7 @@ static enum action pseudo_block(struct inctx *inp, struct symbol *sym)
 static enum action pseudo_repeat(struct inctx *inp, struct symbol *sym)
 {
 	if (inp->rpt_line) {
-		asm_error(inp, "REPEAT does not nest (in a single input context)");
+		asm_error(inp, "REPEAT or WHILE already active");
 		return ACT_CONTINUE;
 	}
 	inp->rpt_line = inp->lineno;
@@ -642,12 +648,36 @@ static enum action pseudo_repeat(struct inctx *inp, struct symbol *sym)
 static enum action pseudo_until(struct inctx *inp, struct symbol *sym)
 {
 	if (inp->rpt_line) {
-		int value = expression(inp, true);
-		if (!value && !err_message)
-			return ACT_RBACK;
+		if (inp->wcond.used)
+			asm_error(inp, "Expected WEND, to match WHILE, not UNTIL");
+		else {
+			int value = expression(inp, true);
+			if (!value && !err_message)
+				return ACT_RBACK;
+			inp->rpt_line = 0;
+		}
 	}
 	else
-		asm_error(inp, "Not REPEATING (UNTIL without REPEAT)");
+		asm_error(inp, "UNTIL without REPEAT");
+	return ACT_CONTINUE;
+}
+
+static enum action pseudo_while(struct inctx *inp, struct symbol *sym)
+{
+	if (inp->rpt_line)
+		asm_error(inp, "REPEAT or WHILE already active");
+	else {
+		non_space(inp);
+		const char *start = inp->lineptr;
+		int value = expression(inp, true);
+		if (!value || err_message)
+			inp->wend_skipping = true;
+		else {
+			dstr_add_bytes(&inp->wcond, start, inp->lineptr - start);
+			inp->rpt_line = inp->lineno;
+			return ACT_RMARK;
+		}
+	}
 	return ACT_CONTINUE;
 }
 
@@ -716,6 +746,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "TTL",     pseudo_ttl     },
 	{ "UNTIL",   pseudo_until   },
 	{ "WIDTH",   pseudo_width   },
+	{ "WHILE",   pseudo_while   },
 	{ "=",       pseudo_assign  }
 };
 

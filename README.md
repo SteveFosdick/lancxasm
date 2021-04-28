@@ -566,18 +566,14 @@ OPNERR  MACRO
 
 ### In General
 
-This assembler does not, at present, implement any feature that causes
-the same statement to have to processed more than once within the same
-pass so there there are no REPEAT  or WHILE loops and no GOTO.
-
 The directives _SYSCLI_, _SYSFX_, _SYSVDU_, _SYSVDU1_ and _SYSVDU2_ are
 recognised but do nothing except cause a warning to be issued.
 
 ### With the Lancaster Assembler.
 
 LaXasm does not implement the Lancaster "Assemble Time Variables"
-(ATVs) in either global or local form or any of the directives associated
-with them.
+(ATVs) in either global or local form or any of the directives
+associated with them.
 
 The precedence levels in expression parser are those from the Lancaster
 Assembler.
@@ -589,14 +585,14 @@ and _TABS_.
 
 The following directives, implemented by the Lancaster Assembler and not
 by ADE, are **NOT** implemented in LaXasm: _AGO_, _AIF_, _AIFDEF_,
-_AIFNDEF_, _ALEN_, _ASET_, _ASTR_, _ASTRIP_, _CHR_, _DEFPARS_,
-_MEXIT_, _MLEN_, _MSET_, _MSTR_, _MSTRIP_,
-_REP_, _SYSVDU1_, _SYSVDU2_, _TIME_, _WAIT_, _WAIT1_, _WAIT2_.
+_AIFNDEF_, _ALEN_, _ASET_, _ASTR_, _ASTRIP_, _CHR_, _DEFPARS_, _MEXIT_,
+_MLEN_, _MSET_, _MSTR_, _MSTRIP_, _REP_, _TIME_, _WAIT_, _WAIT1_,
+_WAIT2_.
 
 ### With ADE/ADE+
 
 LaXasm does not implement separately assembled or relocatable modules
-with separate linking or any of thd directives associated with those
+with separate linking or any of the directives associated with those
 features.
 
 In ADE expression evaluation is left to right.  In LaXasm it follows
@@ -608,5 +604,5 @@ Assembler, are implemented in LaXasm: _BLOCK_, _DATA_, _LISTO_, _WIDTH_.
 The following directives, implemented by ADE+ and not by the Lancaster
 Assembler, are **NOT** implemented in LaXasm: _ASECT_, _EMBED_,
 _END_, _ENT_, _EXT_, _EXZ_, _GEQU_, _GET_, _LLST_, _MACLIB_, _MODULE_,
-_MSB_, _NOLIB_, _OBJ_, _OPT_, _PAUSE_, _QSTR_, _REPEAT_, _RESUME_,
-_RSECT_, _RZP_, _UNTIL_, _WEND_, _WHILE_
+_MSB_, _NOLIB_, _OBJ_, _OPT_, _PAUSE_, _QSTR_, _RESUME_, _RSECT_,
+_RZP_
