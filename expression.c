@@ -74,6 +74,8 @@ static int expr_bracket(struct inctx *inp, bool no_undef)
 static int expr_unary(struct inctx *inp, bool no_undef)
 {
     int ch = non_space(inp);
+    if (ch == '+')
+		ch = *++inp->lineptr;
     if (ch == '-') {
         ++inp->lineptr;
         return -expr_bracket(inp, no_undef);
