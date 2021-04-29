@@ -45,6 +45,8 @@ static int expr_term(struct inctx *inp, bool no_undef)
 		struct symbol *sym = symbol_lookup(inp, no_undef);
 		value = sym ? sym->value : org;
 	}
+	else if (ch == '#')
+		value = passno ? -1 : 0;
 	else {
 		asm_error(inp, "invalid expression");
 		value = org;
