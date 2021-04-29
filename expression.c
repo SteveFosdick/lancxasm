@@ -58,13 +58,13 @@ static int expr_term(struct inctx *inp, bool no_undef)
 static int expr_bracket(struct inctx *inp, bool no_undef)
 {
 	int ch = non_space(inp);
-    if (ch == '(') {
+    if (ch == '(' || ch == '[') {
         ++inp->lineptr;
         int value = expression(inp, no_undef);
-        if (*inp->lineptr == ')')
+        if (*inp->lineptr == ch)
 			do ch = *++inp->lineptr; while (ch == ' ' || ch == '\t' || ch == 0xdd);
         else
-            asm_error(inp, "missing bracket");
+            asm_error(inp, "missing or mismatched bracket");
         return value;
     }
     else
