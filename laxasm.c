@@ -213,22 +213,43 @@ static enum action asm_macdef(struct inctx *inp, int ch, size_t label_size)
 	return ACT_CONTINUE;
 }
 
-static void asm_macparse(struct inctx *inp, char *params[10])
+static int asm_macparse(struct inctx *inp, char *params[10], unsigned parlens[10])
 {
 	int pno = 0, ch = non_space(inp);
-	params[pno] = inp->lineptr - 1;
 	while (!asm_isendchar(ch)) {
-		if (ch == ',') {
-			if (++pno == 9) {
-				asm_error(inp, "too many macro arguments");
-				break;
-			}
-			params[pno] = inp->lineptr;
+		if (pno == 10) {
+			asm_error(inp, "too many macro arguments");
+			break;
 		}
-		ch = *++inp->lineptr;
+		params[pno] = inp->lineptr;
+		if (ch == '[') {
+			++params[pno];
+			do ch = *++inp->lineptr; while (ch != ']' && ch != '\n');
+			if (ch == ']') {
+				parlens[pno] = inp->lineptr - params[pno];
+				++inp->lineptr;
+				ch = non_space(inp);
+				if (ch != ',' && !asm_isendchar(ch)) {
+					asm_error(inp, "macro argument syntax error");
+					return 0;
+				}
+				++inp->lineptr;
+			}
+		}
+		else {
+			do ch = *++inp->lineptr; while (ch != ',' && ch != '\n');
+			parlens[pno] = inp->lineptr - params[pno];
+			if (ch == ',')
+				++inp->lineptr;
+		}
+		ch = non_space(inp);
+		++pno;
 	}
-	while (pno < 9)
-		params[++pno] = inp->lineptr;
+	for (int fno = pno; fno < 10; ++fno) {
+		params[pno] = inp->lineptr;
+		parlens[pno] = 0;
+	}
+	return pno;
 }
 
 static enum action asm_line(struct inctx *inp);
@@ -273,7 +294,8 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 		mac_expand = true;
 		mac_no = mac_count++;
 		char *params[10];
-		asm_macparse(inp, params);
+		unsigned parlens[10];
+		asm_macparse(inp, params, parlens);
 		list_line(inp);
 
 		/* Set up an input context for this macro */
