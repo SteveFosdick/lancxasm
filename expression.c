@@ -153,7 +153,11 @@ static int expr_muldiv(struct inctx *inp, bool no_undef)
         }
         else if (ch == '/') {
             ++inp->lineptr;
-            value /= expr_compare(inp, no_undef);
+            int right = expr_compare(inp, no_undef);
+            if (right == 0)
+				asm_error(inp, "Division by zero");
+			else
+				value /= right;
         }
         else if (ch == '<' && inp->lineptr[1] == '<') {
 			inp->lineptr += 2;
