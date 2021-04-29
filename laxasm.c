@@ -581,7 +581,6 @@ enum action asm_file(struct inctx *inp)
 				inp->lineptr = inp->line.str;
 				act = asm_line(inp);
 			}
-			printf("act=%d\n", act);
 		}
 	}
 	fclose(inp->fp);
