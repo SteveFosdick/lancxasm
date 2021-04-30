@@ -599,7 +599,8 @@ In ADE expression evaluation is left to right.  In LaXasm it follows
 operator precedence.
 
 The following directives, implemented by ADE+ and not by the Lancaster
-Assembler, are implemented in LaXasm: _BLOCK_, _DATA_, _LISTO_, _WIDTH_.
+Assembler, are implemented in LaXasm: _BLOCK_, _DATA_, _LISTO_,
+_REPEAT_, _UNTIL_, _WHILE_, _WEND_, _WIDTH_.
 
 The following directives, implemented by ADE+ and not by the Lancaster
 Assembler, are **NOT** implemented in LaXasm: _ASECT_, _EMBED_,
