@@ -213,32 +213,37 @@ static enum action asm_macdef(struct inctx *inp, int ch, size_t label_size)
 	return ACT_CONTINUE;
 }
 
-static int asm_macparse(struct inctx *inp, char *params[10], unsigned parlens[10])
+struct macro_args {
+	int narg;
+	char *text[10];
+	int lens[10];
+};
+
+static void asm_macparse(struct inctx *inp, struct macro_args *args)
 {
 	int pno = 0, ch = non_space(inp);
+	args->narg = 0;
 	while (!asm_isendchar(ch)) {
 		if (pno == 10) {
 			asm_error(inp, "too many macro arguments");
 			break;
 		}
-		params[pno] = inp->lineptr;
+		args->text[pno] = inp->lineptr;
 		if (ch == '[') {
-			++params[pno];
+			++args->text[pno];
 			do ch = *++inp->lineptr; while (ch != ']' && ch != '\n');
 			if (ch == ']') {
-				parlens[pno] = inp->lineptr - params[pno];
+				args->lens[pno] = inp->lineptr - args->text[pno];
 				++inp->lineptr;
 				ch = non_space(inp);
-				if (ch != ',' && !asm_isendchar(ch)) {
+				if (ch != ',' && !asm_isendchar(ch))
 					asm_error(inp, "macro argument syntax error");
-					return 0;
-				}
 				++inp->lineptr;
 			}
 		}
 		else {
 			do ch = *++inp->lineptr; while (ch != ',' && ch != '\n');
-			parlens[pno] = inp->lineptr - params[pno];
+			args->lens[pno] = inp->lineptr - args->text[pno];
 			if (ch == ',')
 				++inp->lineptr;
 		}
@@ -246,36 +251,105 @@ static int asm_macparse(struct inctx *inp, char *params[10], unsigned parlens[10
 		++pno;
 	}
 	for (int fno = pno; fno < 10; ++fno) {
-		params[pno] = inp->lineptr;
-		parlens[pno] = 0;
+		args->text[pno] = inp->lineptr;
+		args->lens[pno] = 0;
 	}
-	return pno;
+	args->narg = pno;
 }
 
 static enum action asm_line(struct inctx *inp);
 
-static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, char *params[10], const char *at)
+static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, struct macro_args *args, char *at)
 {
 	const char *start = ml->text;
 	const char *end = start + ml->length;
 	mtx->line.used = 0;
 	do {
 		dstr_add_bytes(&mtx->line, start, at - start);
-		int digit = *++at;
-		if (digit == '0') {
-			char count[6];
-			size_t size = snprintf(count, sizeof(count), "%05d", mac_no);
-			dstr_add_bytes(&mtx->line, count, size);
+		bool wantlen = false;
+		int len, sub_start = 0, sub_len = -1;
+		int argno, ch = *++at;
+		char numbuf[6], *base;
+		if (ch == '?') {
+			wantlen = true;
+			ch = *++at;
 		}
-		else if (digit >= '1' && digit <= '9') {
-			digit -= '1';
-			char *argb = params[digit]+1;
-			char *arge = params[digit+1];
-			if (arge > argb)
-				dstr_add_bytes(&mtx->line, argb, arge - argb);
+		mtx->lineptr = at+1;
+		if (ch == '(') {
+			/* take a sub-string */
+			sub_start = expression(mtx, true) - 1;
+			if (err_message)
+				return ACT_CONTINUE;
+			ch = *mtx->lineptr;
+			if (ch == ',') {
+				++mtx->lineptr;
+				sub_len = expression(mtx, true);
+				if (err_message)
+					return ACT_CONTINUE;
+				ch = *mtx->lineptr;
+			}
+			if (ch != ')') {
+				asm_error(mtx, "missing ) in macro argument");
+				return ACT_CONTINUE;
+			}
+			at = ++mtx->lineptr;
+			ch = *at;
 		}
-		else
-			asm_error(mtx, "invalid macro parameter @%c", digit);
+		if (ch == '[') {
+			/* argument number is given by an expression */
+			argno = expression(mtx, true);
+			if (err_message)
+				return ACT_CONTINUE;
+			if (*mtx->lineptr != ']') {
+				asm_error(mtx, "missing ] in macro argument");
+				return ACT_CONTINUE;;
+			}
+			if (argno < 0 || argno > 9) {
+				asm_error(mtx, "invalid macro argument number %d", argno);
+				return ACT_CONTINUE;;
+			}
+			at = mtx->lineptr;
+		}
+		else if (ch >= '0' && ch <= '9')
+			argno = ch - '0';
+		else if (ch >= 'A' && ch <= 'J') {
+			wantlen = true;
+			argno = ch - 'A';
+		}
+		else if (ch >= 'a' && ch <= 'j') {
+			wantlen = true;
+			argno = ch - 'a';
+		}
+		else if (ch == 'N' || ch == 'n')
+			argno = -1;
+		else {
+			asm_error(mtx, "invalid macro argument @%c", ch);
+			return ACT_CONTINUE;
+		}
+		if (argno == -1) {
+			base = numbuf;
+			len = snprintf(numbuf, sizeof(numbuf), "%d", args->narg);
+		}
+		else if (argno == 0) {
+			base = numbuf;
+			len = snprintf(numbuf, sizeof(numbuf), "%05d", mac_no);
+		}
+		else {
+			--argno;
+			base = args->text[argno];
+			len = args->lens[argno];
+		}
+		if (wantlen) {
+			base = numbuf;
+			len = snprintf(numbuf, sizeof(numbuf), "%d", len);
+		}
+		if (sub_start > 0) {
+			base += sub_start;
+			len -= sub_start;
+		}
+		if (sub_len >= 0 && sub_len < len)
+			len = sub_len;
+		dstr_add_bytes(&mtx->line, base, len);
 		start = at + 1;
 		at = memchr(start, '@', end - start);
 	}
@@ -283,6 +357,7 @@ static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, char *par
 	if (start < end)
 		dstr_add_bytes(&mtx->line, start, end - start);
 	mtx->lineptr = mtx->line.str;
+	printf("asm_macexpand: %.*s", (int)mtx->line.used, mtx->line.str);
 	return asm_line(mtx);
 }
 
@@ -293,9 +368,8 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 		bool save_mac_expand = mac_expand;
 		mac_expand = true;
 		mac_no = mac_count++;
-		char *params[10];
-		unsigned parlens[10];
-		asm_macparse(inp, params, parlens);
+		struct macro_args args;
+		asm_macparse(inp, &args);
 		list_line(inp);
 
 		/* Set up an input context for this macro */
@@ -315,9 +389,9 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 		for (struct macline *ml = mac->macro; ml; ml = ml->next) {
 			enum action act;
 			/* does the line have args to be subsitited? */
-			const char *at = memchr(ml->text, '@', ml->length);
+			char *at = memchr(ml->text, '@', ml->length);
 			if (at)
-				act = asm_macsubst(&mtx, ml, params, at);
+				act = asm_macsubst(&mtx, ml, &args, at);
 			else {
 				/* no, avoid a copy */
 				char *save = mtx.line.str;
