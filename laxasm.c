@@ -259,13 +259,13 @@ static void asm_macparse(struct inctx *inp, struct macro_args *args)
 
 static enum action asm_line(struct inctx *inp);
 
-static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, struct macro_args *args, char *at)
+static enum action asm_macsubst(struct inctx *mctx, struct inctx *sctx, struct macro_args *args, char *at)
 {
-	const char *start = ml->text;
-	const char *end = start + ml->length;
-	mtx->line.used = 0;
+	const char *start = mctx->line.str;
+	const char *end = start + mctx->line.used;
+	sctx->line.used = 0;
 	do {
-		dstr_add_bytes(&mtx->line, start, at - start);
+		dstr_add_bytes(&sctx->line, start, at - start);
 		bool wantlen = false;
 		int len, sub_start = 0, sub_len = -1;
 		int argno, ch = *++at;
@@ -274,41 +274,41 @@ static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, struct ma
 			wantlen = true;
 			ch = *++at;
 		}
-		mtx->lineptr = at+1;
+		mctx->lineptr = at+1;
 		if (ch == '(') {
 			/* take a sub-string */
-			sub_start = expression(mtx, true) - 1;
+			sub_start = expression(mctx, true) - 1;
 			if (err_message)
 				return ACT_CONTINUE;
-			ch = *mtx->lineptr;
+			ch = *mctx->lineptr;
 			if (ch == ',') {
-				++mtx->lineptr;
-				sub_len = expression(mtx, true);
+				++mctx->lineptr;
+				sub_len = expression(mctx, true);
 				if (err_message)
 					return ACT_CONTINUE;
-				ch = *mtx->lineptr;
+				ch = *mctx->lineptr;
 			}
 			if (ch != ')') {
-				asm_error(mtx, "missing ) in macro argument");
+				asm_error(mctx, "missing ) in macro argument");
 				return ACT_CONTINUE;
 			}
-			at = ++mtx->lineptr;
+			at = ++mctx->lineptr;
 			ch = *at;
 		}
 		if (ch == '[') {
 			/* argument number is given by an expression */
-			argno = expression(mtx, true);
+			argno = expression(mctx, true);
 			if (err_message)
 				return ACT_CONTINUE;
-			if (*mtx->lineptr != ']') {
-				asm_error(mtx, "missing ] in macro argument");
+			if (*mctx->lineptr != ']') {
+				asm_error(mctx, "missing ] in macro argument");
 				return ACT_CONTINUE;;
 			}
 			if (argno < 0 || argno > 9) {
-				asm_error(mtx, "invalid macro argument number %d", argno);
+				asm_error(mctx, "invalid macro argument number %d", argno);
 				return ACT_CONTINUE;;
 			}
-			at = mtx->lineptr;
+			at = mctx->lineptr;
 		}
 		else if (ch >= '0' && ch <= '9')
 			argno = ch - '0';
@@ -323,7 +323,7 @@ static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, struct ma
 		else if (ch == 'N' || ch == 'n')
 			argno = -1;
 		else {
-			asm_error(mtx, "invalid macro argument @%c", ch);
+			asm_error(mctx, "invalid macro argument @%c", ch);
 			return ACT_CONTINUE;
 		}
 		if (argno == -1) {
@@ -349,16 +349,29 @@ static enum action asm_macsubst(struct inctx *mtx, struct macline *ml, struct ma
 		}
 		if (sub_len >= 0 && sub_len < len)
 			len = sub_len;
-		dstr_add_bytes(&mtx->line, base, len);
+		dstr_add_bytes(&sctx->line, base, len);
 		start = at + 1;
 		at = memchr(start, '@', end - start);
 	}
 	while (at);
 	if (start < end)
-		dstr_add_bytes(&mtx->line, start, end - start);
-	mtx->lineptr = mtx->line.str;
-	printf("asm_macexpand: %.*s", (int)mtx->line.used, mtx->line.str);
-	return asm_line(mtx);
+		dstr_add_bytes(&sctx->line, start, end - start);
+	sctx->lineptr = sctx->line.str;
+	return asm_line(sctx);
+}
+
+static void mac_init_ctx(struct inctx *parent, struct inctx *child)
+{
+	dstr_empty(&child->line, 0);
+	dstr_empty(&child->wcond, 0);
+	child->parent = parent;
+	child->fp = NULL;
+	child->name = parent->name;
+	child->lineno = parent->lineno;
+	child->whence = 'M';
+	child->wcond.used = 0;
+	child->rpt_line = 0;
+	child->wend_skipping = false;
 }
 
 static void asm_macexpand(struct inctx *inp, struct symbol *mac)
@@ -372,45 +385,38 @@ static void asm_macexpand(struct inctx *inp, struct symbol *mac)
 		asm_macparse(inp, &args);
 		list_line(inp);
 
-		/* Set up an input context for this macro */
-		struct inctx mtx;
-		dstr_empty(&mtx.line, 0);
-		dstr_empty(&mtx.wcond, 0);
-		mtx.parent = inp;
-		mtx.fp = NULL;
-		mtx.name = inp->name;
-		mtx.lineno = inp->lineno;
-		mtx.whence = 'M';
-		mtx.wcond.used = 0;
-		mtx.rpt_line = 0;
-		mtx.wend_skipping = false;
+		/* Set up an input context for non-subsutited lines. */
+		struct inctx mctx;
+		mac_init_ctx(inp, &mctx);
+
+		/* Set up an input context for subsutited lines. */
+		struct inctx sctx;
+		mac_init_ctx(&mctx, &sctx);
 
 		/* step through each line */
 		for (struct macline *ml = mac->macro; ml; ml = ml->next) {
+			mctx.line.str = mctx.lineptr = ml->text;
+			mctx.line.used = ml->length;
 			enum action act;
 			/* does the line have args to be subsitited? */
 			char *at = memchr(ml->text, '@', ml->length);
 			if (at)
-				act = asm_macsubst(&mtx, ml, &args, at);
-			else {
-				/* no, avoid a copy */
-				char *save = mtx.line.str;
-				mtx.line.str = mtx.lineptr = ml->text;
-				mtx.line.used = ml->length;
-				act = asm_line(&mtx);
-				mtx.line.str = save;
-			}
+				act = asm_macsubst(&mctx, &sctx, &args, at);
+			else
+				act = asm_line(&mctx);
 			if (act == ACT_STOP)
 				break;
 			else if (act == ACT_RMARK)
-				mtx.mpos = ml;
+				mctx.mpos = ml;
 			else if (act == ACT_RBACK)
-				ml = mtx.mpos;
+				ml = mctx.mpos;
 		}
-		if (mtx.line.allocated)
-			free(mtx.line.str);
-		if (mtx.wcond.allocated)
-			free(mtx.wcond.str);
+		if (mctx.wcond.allocated)
+			free(mctx.wcond.str);
+		if (sctx.line.allocated)
+			free(sctx.line.str);
+		if (sctx.wcond.allocated)
+			free(sctx.wcond.str);
 		if (save_mac_expand)
 			mac_no = save_mac_no;
 		mac_expand = save_mac_expand;
