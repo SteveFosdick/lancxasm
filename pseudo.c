@@ -373,7 +373,7 @@ static enum action pseudo_chn(struct inctx *inp, struct symbol *sym)
 	return ACT_STOP;
 }
 
-static enum action pseudo_include(struct inctx *inp, struct symbol *sym)
+enum action pseudo_include(struct inctx *inp)
 {
 	enum action act;
 	struct dstring filename;
@@ -386,6 +386,7 @@ static enum action pseudo_include(struct inctx *inp, struct symbol *sym)
 		incfile.fp = fp;
 		incfile.name = filename.str;
 		incfile.whence = 'I';
+		list_line(inp);
 		act = asm_file(&incfile);
 		if (incfile.line.allocated)
 			free(incfile.line.str);
@@ -394,6 +395,7 @@ static enum action pseudo_include(struct inctx *inp, struct symbol *sym)
 	}
 	else {
 		asm_error(inp, "unable to open include file %.*s: %s", (int)filename.used, filename.str, strerror(errno));
+		list_line(inp);
 		act = ACT_STOP;
 	}
 	free(filename.str);
@@ -727,7 +729,6 @@ static const struct op_type pseudo_ops[] = {
 	{ "EQU",     pseudo_equ     },
 	{ "EXEC",    pseudo_exec    },
 	{ "HEX",     pseudo_hex     },
-	{ "INCLUDE", pseudo_include },
 	{ "INFO",    pseudo_disp2   },
 	{ "LFCOND",  pseudo_lfcond  },
 	{ "LISTO",   pseudo_listo   },

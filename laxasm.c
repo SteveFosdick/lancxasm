@@ -101,7 +101,7 @@ static void list_extra(struct inctx *inp)
 	}
 }
 
-static void list_line(struct inctx *inp)
+void list_line(struct inctx *inp)
 {
 	if (passno && list_fp) {
 		bool skipping = cond_skipping || inp->wend_skipping;
@@ -562,6 +562,8 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 			}
 			else if (cond_skipping || inp->wend_skipping || (opsize == 3 && m6502_op(inp, opname)))
 				list_line(inp);
+			else if (!strncmp(opname, "INCLUDE", opsize))
+				act = pseudo_include(inp);
 			else {
 				act = pseudo_op(inp, opname, opsize, sym);
 				if (act == ACT_NOTFOUND) {

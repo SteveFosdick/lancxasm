@@ -79,6 +79,7 @@ extern struct symbol *macsym;
 
 __attribute__((format (printf, 2, 3)))
 extern void asm_error(struct inctx *inp, const char *fmt, ...);
+extern void list_line(struct inctx *inp);
 extern enum action asm_file(struct inctx *inp);
 extern int non_space(struct inctx *inp);
 extern void dump_ictx(struct inctx *inp, const char *when);
@@ -104,6 +105,7 @@ extern bool m6502_op(struct inctx *inp, const char *opname);
 
 /* pseudo.c */
 extern enum action pseudo_op(struct inctx *inp, const char *opname, size_t opsize, struct symbol *sym);
+extern enum action pseudo_include(struct inctx *inp);
 
 #endif
 
