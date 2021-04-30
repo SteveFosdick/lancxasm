@@ -179,19 +179,25 @@ line.
 
 ### Expressions
 
-Expressions may contain literal numbers, symbols (labels or values
-set with EQU) operators and brackets.  Literal numbers may be prefixed
-to use a base other than decimal:
+Expressions may contain literal numbers, built-in symbols, user symbols
+(labels or values set with EQU) operators and brackets.
+
+The built-in symbols are:
+```
+*      - the location counter (as set by ORG etc).
+#      - false on pass one, true on pass two.
+```
+Literal numbers may be prefixed to use a base other than decimal:
 
 ```
 & or $ - hexadecimal
 %      - binary
 ```
-
 Operators are evaluated in precedence order as follows, working from
 highest to lowest:
 ```
 () - brackets
+[] - brackets (used to avoid confusion with indirect addressing).
 
 -  - unary minus (negate value).
 ~  - unary 1's complement (NOT)
@@ -202,10 +208,14 @@ highest to lowest:
 =  - test for equality
 #  - test for inequality
 >  - (infix) greater than.
+>= - greater than or equal to.
 <  - (infix) less than.
+<= - (infix) less than or equal to.
 
 *  - multiply
 /  - divide
+<< - shift left
+>> - shift right
 
 +  - add
 -  - subtract.
