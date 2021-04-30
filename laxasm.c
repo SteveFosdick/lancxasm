@@ -449,10 +449,32 @@ static void asm_if(struct inctx *inp, int iftype)
 			}
 			list_value = value;
 			list_char = '=';
+			list_line(inp);
 			cond_skipping = !value;
+			return;
 		}
 	}
 	list_line(inp);
+}
+
+static void asm_else(struct inctx *inp)
+{
+	if (!cond_level) {
+		asm_error(inp, "ELSE without IF");
+		list_line(inp);
+	}
+	else if (!cond_stack[cond_level-1]) {
+		if (cond_skipping) {
+			cond_skipping = false;
+			list_line(inp);
+		}
+		else {
+			list_line(inp);
+			cond_skipping = true;
+		}
+	}
+	else
+		list_line(inp);
 }
 
 static enum action asm_wend(struct inctx *inp)
@@ -542,13 +564,8 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 				asm_if(inp, IF_DEF);
 			else if (opsize == 6 && !strncmp(opname, "IFNDEF", opsize))
 				asm_if(inp, IF_NDEF);
-			else if (opsize == 4 && !strncmp(opname, "ELSE", opsize)) {
-				if (!cond_level)
-					asm_error(inp, "ELSE without IF");
-				else if (!cond_stack[cond_level-1])
-					cond_skipping = !cond_skipping;
-				list_line(inp);
-			}
+			else if (opsize == 4 && !strncmp(opname, "ELSE", opsize))
+				asm_else(inp);
 			else if ((opsize == 2 && !strncmp(opname, "FI", opsize)) || (opsize == 3 && !strncmp(opname, "FIN", opsize))) {
 				if (!cond_level)
 					asm_error(inp, "FI without IF");
