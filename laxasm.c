@@ -500,7 +500,7 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 			*--nptr = ch;
 		}
 		bool skipping = cond_skipping || inp->wend_skipping;
-		if (!skipping && !strncmp(opname, "MACRO", opsize)) {
+		if (!skipping && opsize == 5 && !strncmp(opname, "MACRO", opsize)) {
 			if (macsym)
 				asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
 			else if (label_size) {
@@ -536,33 +536,33 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 				if ((sym = symbol_enter(inp, label_size, scope, false)) && !passno)
 					sym->value = org;
 			}
-			if (!strncmp(opname, "IF", opsize))
+			if (opsize == 2 && !strncmp(opname, "IF", opsize))
 				asm_if(inp, IF_EXPR);
-			else if (!strncmp(opname, "IFDEF", opsize))
+			else if (opsize == 5 && !strncmp(opname, "IFDEF", opsize))
 				asm_if(inp, IF_DEF);
-			else if (!strncmp(opname, "IFNDEF", opsize))
+			else if (opsize == 6 && !strncmp(opname, "IFNDEF", opsize))
 				asm_if(inp, IF_NDEF);
-			else if (!strncmp(opname, "ELSE", opsize)) {
+			else if (opsize == 4 && !strncmp(opname, "ELSE", opsize)) {
 				if (!cond_level)
 					asm_error(inp, "ELSE without IF");
 				else if (!cond_stack[cond_level-1])
 					cond_skipping = !cond_skipping;
 				list_line(inp);
 			}
-			else if (!strncmp(opname, "FI", opsize) || !strncmp(opname, "FIN", opsize)) {
+			else if ((opsize == 2 && !strncmp(opname, "FI", opsize)) || (opsize == 3 && !strncmp(opname, "FIN", opsize))) {
 				if (!cond_level)
 					asm_error(inp, "FI without IF");
 				else
 					cond_skipping = cond_stack[--cond_level];
 				list_line(inp);
 			}
-			else if (!strncmp(opname, "WEND", opsize)) {
+			else if (opsize == 4 && !strncmp(opname, "WEND", opsize)) {
 				act = asm_wend(inp);
 				list_line(inp);
 			}
 			else if (cond_skipping || inp->wend_skipping || (opsize == 3 && m6502_op(inp, opname)))
 				list_line(inp);
-			else if (!strncmp(opname, "INCLUDE", opsize))
+			else if (opsize == 7 && !strncmp(opname, "INCLUDE", opsize))
 				act = pseudo_include(inp);
 			else {
 				act = pseudo_op(inp, opname, opsize, sym);
