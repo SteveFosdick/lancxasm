@@ -1,18 +1,21 @@
 #include "laxasm.h"
 #include <string.h>
 
-struct optab_ent {
-	char mnemonic[4];
-	uint8_t base, group;
-};
-
 /*
+ * Mnemonic and base opcode table.
+ *
+ * For each mnemonic this tables gives two values, a base opcode and
+ * an instruction group.  For the implied and PC-relative instructions
+ * the base opcode value is also the final one but for all others this
+ * value is transformed by adding another value according to the
+ * addressing mode actually used.
+ *
  * Instruction groups.
  *
  * 0x00: implied.
  * 0x01: PC-relative.
  * 0x02: ALU Group, ADC, AND, CMP, EOR, LDA, ORA, SBC
- * 0x03: STA (like ALU group, but no immediate mode).
+ * 0x03: STA (really ALU group, but no immediate mode).
  * 0x04: shifts and rotates.
  * 0x05: INC and DEC.
  * 0x06: BIT
@@ -23,7 +26,16 @@ struct optab_ent {
  * 0x0b: STY
  * 0x0c: JMP
  * 0x0d: JSR
+ * 0x0e: STZ
+ * 0x0f: TSB/TRB
+ *
+ * Bit 7 is set means that group is CMOS only.
  */
+
+struct optab_ent {
+	char mnemonic[4];
+	uint8_t base, group;
+};
 
 static const struct optab_ent m6502_optab[] = {
 	{ "ADC", 0x60, 0x02 },
@@ -92,8 +104,19 @@ static const struct optab_ent m6502_optab[] = {
 	{ "TSX", 0xba, 0x00 },
 	{ "TXA", 0x8a, 0x00 },
 	{ "TXS", 0x9a, 0x00 },
-	{ "TYA", 0x98, 0x00 },
+	{ "TYA", 0x98, 0x00 }
 };
+
+/*
+ * Addressing mode tables.
+ *
+ * Not all addressing modes are represented in these tables but where
+ * many groups of instructions all support the same addressing mode the
+ * table here gives a value to be added to the 'base' value from the
+ * opcode table above to get the final opcode value.  The value 0xff
+ * means this mode is not available on that instruction group and
+ * bit 7 set means that combination is CMOS-only.
+ */
 
 /*                                    IMP   REL   ALU   STA   shift I/D   BIT   CPX/Y LDX   LDY   STX   STY   JMP   JSR   STZ   TSB */
 static const uint8_t m6502_imm[]  = { 0xff, 0xff, 0x09, 0xff, 0xff, 0xff, 0x69, 0x00, 0x02, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
