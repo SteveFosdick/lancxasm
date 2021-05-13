@@ -155,8 +155,11 @@ static void m6502_three_byte(unsigned code, unsigned value)
 
 static void m6502_implied(struct inctx *inp, const struct optab_ent *opc)
 {
-	if ((opc->group & 0x7f) == 0)
+	unsigned group = opc->group & 0x7f;
+	if (group == 0)
 		m6502_one_byte(opc->base);
+	else if (group == 0x04)
+		m6502_one_byte(opc->base + 0x0a);
 	else
 		asm_error(inp, "%s needs an operand", opc->mnemonic);
 }
