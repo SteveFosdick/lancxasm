@@ -504,101 +504,96 @@ static enum action asm_wend(struct inctx *inp)
 static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 {
 	enum action act = ACT_CONTINUE;
-	if (asm_isendchar(ch))
-		list_line(inp);
-	else {
-		char *ptr = inp->lineptr;
-		do
-			ch = *++ptr;
-		while (!asm_isspace(ch) && !asm_isendchar(ch));
-		size_t opsize = ptr - inp->lineptr;
-		inp->lineptr = ptr;
-		char opname[opsize+1], *nptr = opname + opsize;
-		*nptr = 0;
-		while (nptr > opname) {
-			ch = *--ptr;
-			if (ch >= 'a' && ch <= 'z')
-				ch &= 0xdf;
-			*--nptr = ch;
+	char *ptr = inp->lineptr;
+	while (!asm_isspace(ch) && !asm_isendchar(ch))
+		ch = *++ptr;
+	size_t opsize = ptr - inp->lineptr;
+	inp->lineptr = ptr;
+	char opname[opsize+1], *nptr = opname + opsize;
+	*nptr = 0;
+	while (nptr > opname) {
+		ch = *--ptr;
+		if (ch >= 'a' && ch <= 'z')
+			ch &= 0xdf;
+		*--nptr = ch;
+	}
+	bool skipping = cond_skipping || inp->wend_skipping;
+	if (!skipping && opsize == 5 && !strncmp(opname, "MACRO", opsize)) {
+		if (macsym)
+			asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
+		else if (label_size) {
+			if (*inp->lineptr == ':')
+				asm_error(inp, "local scope MACROs not supported");
+			else {
+				struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO, false);
+				if (sym) {
+					macsym = sym;
+					if (!passno)
+						sym->macro = NULL;
+				}
+			}
 		}
-		bool skipping = cond_skipping || inp->wend_skipping;
-		if (!skipping && opsize == 5 && !strncmp(opname, "MACRO", opsize)) {
-			if (macsym)
-				asm_error(inp, "no nested MACROs, %s is being defined", macsym->name);
-			else if (label_size) {
-				if (*inp->lineptr == ':')
-					asm_error(inp, "local scope MACROs not supported");
+		else
+			asm_error(inp, "a MACRO must have a label (name)");
+		list_line(inp);
+	}
+	else {
+		struct symbol *sym = NULL;
+		if (!skipping && label_size) {
+			int scope = *inp->line.str == ':' ? scope_no : SCOPE_GLOBAL;
+			if (opsize == 1 && *opname == '=') {
+				if ((sym = symbol_enter(inp, label_size, scope, true))) {
+					uint16_t value = expression(inp, passno);
+					sym->value = value;
+					list_value = value;
+					list_char = '=';
+				}
+				list_line(inp);
+				return act;
+			}
+			if ((sym = symbol_enter(inp, label_size, scope, false)) && !passno)
+				sym->value = org;
+		}
+		if (opsize == 2 && !strncmp(opname, "IF", opsize))
+			asm_if(inp, IF_EXPR);
+		else if (opsize == 5 && !strncmp(opname, "IFDEF", opsize))
+			asm_if(inp, IF_DEF);
+		else if (opsize == 6 && !strncmp(opname, "IFNDEF", opsize))
+			asm_if(inp, IF_NDEF);
+		else if (opsize == 4 && !strncmp(opname, "ELSE", opsize))
+			asm_else(inp);
+		else if ((opsize == 2 && !strncmp(opname, "FI", opsize)) || (opsize == 3 && !strncmp(opname, "FIN", opsize))) {
+			if (!cond_level)
+				asm_error(inp, "FI without IF");
+			else
+				cond_skipping = cond_stack[--cond_level];
+			list_line(inp);
+		}
+		else if (opsize == 4 && !strncmp(opname, "WEND", opsize)) {
+			act = asm_wend(inp);
+			list_line(inp);
+		}
+		else if (cond_skipping || inp->wend_skipping || opsize == 0 || (opsize == 3 && m6502_op(inp, opname)))
+			list_line(inp);
+		else if (opsize == 7 && !strncmp(opname, "INCLUDE", opsize))
+			act = pseudo_include(inp);
+		else {
+			act = pseudo_op(inp, opname, opsize, sym);
+			if (act == ACT_NOTFOUND) {
+				/* Not a pseudo-op, is it a MACRO? */
+				struct symbol sym;
+				sym.scope = SCOPE_MACRO;
+				sym.name = opname;
+				struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
+				if (node)
+					asm_macexpand(inp, *node);
 				else {
-					struct symbol *sym = symbol_enter(inp, label_size, SCOPE_MACRO, false);
-					if (sym) {
-						macsym = sym;
-						if (!passno)
-							sym->macro = NULL;
-					}
+					asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
+					list_line(inp);
 				}
 			}
 			else
-				asm_error(inp, "a MACRO must have a label (name)");
-			list_line(inp);
-		}
-		else {
-			struct symbol *sym = NULL;
-			if (!skipping && label_size) {
-				int scope = *inp->line.str == ':' ? scope_no : SCOPE_GLOBAL;
-				if (opsize == 1 && *opname == '=') {
-					if ((sym = symbol_enter(inp, label_size, scope, true))) {
-						uint16_t value = expression(inp, passno);
-						sym->value = value;
-						list_value = value;
-						list_char = '=';
-					}
-					list_line(inp);
-					return act;
-				}
-				if ((sym = symbol_enter(inp, label_size, scope, false)) && !passno)
-					sym->value = org;
-			}
-			if (opsize == 2 && !strncmp(opname, "IF", opsize))
-				asm_if(inp, IF_EXPR);
-			else if (opsize == 5 && !strncmp(opname, "IFDEF", opsize))
-				asm_if(inp, IF_DEF);
-			else if (opsize == 6 && !strncmp(opname, "IFNDEF", opsize))
-				asm_if(inp, IF_NDEF);
-			else if (opsize == 4 && !strncmp(opname, "ELSE", opsize))
-				asm_else(inp);
-			else if ((opsize == 2 && !strncmp(opname, "FI", opsize)) || (opsize == 3 && !strncmp(opname, "FIN", opsize))) {
-				if (!cond_level)
-					asm_error(inp, "FI without IF");
-				else
-					cond_skipping = cond_stack[--cond_level];
 				list_line(inp);
-			}
-			else if (opsize == 4 && !strncmp(opname, "WEND", opsize)) {
-				act = asm_wend(inp);
-				list_line(inp);
-			}
-			else if (cond_skipping || inp->wend_skipping || (opsize == 3 && m6502_op(inp, opname)))
-				list_line(inp);
-			else if (opsize == 7 && !strncmp(opname, "INCLUDE", opsize))
-				act = pseudo_include(inp);
-			else {
-				act = pseudo_op(inp, opname, opsize, sym);
-				if (act == ACT_NOTFOUND) {
-					/* Not a pseudo-op, is it a MACRO? */
-					struct symbol sym;
-					sym.scope = SCOPE_MACRO;
-					sym.name = opname;
-					struct symbol **node = tfind(&sym, &symbols, symbol_cmp);
-					if (node)
-						asm_macexpand(inp, *node);
-					else {
-						asm_error(inp, "unrecognised opcode '%.*s'", (int)opsize, opname);
-						list_line(inp);
-					}
-				}
-				else
-					list_line(inp);
-			}
 		}
 	}
 	return act;
