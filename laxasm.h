@@ -40,6 +40,7 @@ struct inctx {
 	char *lineptr;
 	unsigned lineno;
 	unsigned rpt_line;
+	unsigned next_line;
 	char whence;
 	char wend_skipping;
 };

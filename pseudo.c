@@ -358,7 +358,7 @@ static enum action pseudo_chn(struct inctx *inp, struct symbol *sym)
 			fclose(ctx->fp);
 			ctx->fp = fp;
 			ctx->name = filename.str;
-			ctx->lineno = 1;
+			ctx->next_line = 1;
 			return ACT_CONTINUE;
 		}
 		else {

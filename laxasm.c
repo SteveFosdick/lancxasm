@@ -654,6 +654,7 @@ enum action asm_file(struct inctx *inp)
 {
 	enum action act = ACT_CONTINUE;
 	inp->lineno = 1;
+	inp->next_line = 2;
 	inp->line.used = 0;
 	inp->wcond.used = 0;
 	inp->rpt_line = 0;
@@ -694,7 +695,7 @@ enum action asm_file(struct inctx *inp)
 				}
 				if (dstr_getdelim(&inp->line, ch, inp->fp) < 0)
 					break;
-				++inp->lineno;
+				inp->lineno = inp->next_line++;
 				inp->lineptr = inp->line.str;
 				act = asm_line(inp);
 			}
