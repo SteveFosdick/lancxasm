@@ -60,17 +60,19 @@ static int expr_term(struct inctx *inp, bool no_undef)
 static int expr_bracket(struct inctx *inp, bool no_undef)
 {
 	int ch = non_space(inp);
-    if (ch == '(' || ch == '[') {
-        ++inp->lineptr;
-        int value = expression(inp, no_undef);
-        if (*inp->lineptr == ch)
-			do ch = *++inp->lineptr; while (ch == ' ' || ch == '\t' || ch == 0xdd);
-        else
-            asm_error(inp, "missing or mismatched bracket");
-        return value;
-    }
+	if (ch == '(')
+		ch= ')';
+	else if (ch == '[')
+		ch = ']';
+	else
+        return expr_term(inp, no_undef);
+    ++inp->lineptr;
+    int value = expression(inp, no_undef);
+    if (*inp->lineptr == ch)
+		do ch = *++inp->lineptr; while (ch == ' ' || ch == '\t' || ch == 0xdd);
     else
-		return expr_term(inp, no_undef);
+		asm_error(inp, "missing or mismatched bracket");
+    return value;
 }
 
 static int expr_unary(struct inctx *inp, bool no_undef)

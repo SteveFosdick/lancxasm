@@ -508,7 +508,6 @@ static enum action asm_operation(struct inctx *inp, int ch, size_t label_size)
 	while (!asm_isspace(ch) && !asm_isendchar(ch))
 		ch = *++ptr;
 	size_t opsize = ptr - inp->lineptr;
-	//printf("%.*sopsize=%d, op=%.*s\n", (int)inp->line.used, inp->line.str, (int)opsize, (int)opsize, inp->lineptr);
 	inp->lineptr = ptr;
 	char opname[opsize+1], *nptr = opname + opsize;
 	*nptr = 0;
@@ -705,6 +704,8 @@ enum action asm_file(struct inctx *inp)
 	return act;
 }
 
+static const char openerr[] = "laxasm: unable to open %s file '%s': %s\n";
+
 static void asm_pass(int argc, char **argv, struct inctx *inp)
 {
     org = 0;
@@ -723,7 +724,7 @@ static void asm_pass(int argc, char **argv, struct inctx *inp)
 		if ((inp->fp = fopen(fn, "r")))
 			asm_file(inp);
 		else {
-			fprintf(stderr, "laxasm: unable to open source file '%s': %s\n", fn, strerror(errno));
+			fprintf(stderr, openerr, "source", fn, strerror(errno));
 			err_count++;
 		}
 	}
@@ -799,12 +800,12 @@ int main(int argc, char **argv)
 		dstr_empty(&infile.wcond, 0);
 		dstr_empty(&objcode, MIN_LINE);
 		if (list_filename && (list_fp = fopen(list_filename, "w")) == NULL) {
-			fprintf(stderr, "laxasm: unable to open listing file '%s': %s\n", list_filename, strerror(errno));
+			fprintf(stderr, openerr, "listing", list_filename, strerror(errno));
 			status = 2;
 		}
 		else {
 			if (obj_filename && (obj_fp = fopen(obj_filename, "wb")) == NULL) {
-				fprintf(stderr, "laxasm: unable to open object code file '%s': %s\n", list_filename, strerror(errno));
+				fprintf(stderr, openerr, "object code", list_filename, strerror(errno));
 				status = 3;
 			}
 			else {
@@ -855,7 +856,7 @@ int main(int argc, char **argv)
 					fclose(inf_fp);
 				}
 				else {
-					fprintf(stderr, "laxasm: unable to open INF file '%s': %s\n", inf_file.str, strerror(errno));
+					fprintf(stderr, openerr, "INF", inf_file.str, strerror(errno));
 					status = 6;
 				}
 			}

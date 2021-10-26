@@ -1,152 +1,213 @@
 #include "laxasm.h"
 #include <string.h>
 
+/*
+ * Mnemonic and base opcode table.
+ *
+ * For each mnemonic this tables gives two values, a base opcode and
+ * an instruction group.  For the implied and PC-relative instructions
+ * the base opcode value is also the final one but for all others this
+ * value is transformed by adding another value according to the
+ * addressing mode actually used.
+ *
+ * Instruction groups.
+ *
+ * 0x00: implied.
+ * 0x01: PC-relative.
+ * 0x02: ALU Group, ADC, AND, CMP, EOR, LDA, ORA, SBC
+ * 0x03: STA (really ALU group, but no immediate mode).
+ * 0x04: shifts and rotates.
+ * 0x05: INC and DEC.
+ * 0x06: BIT
+ * 0x07: CPX, CPY
+ * 0x08: LDX
+ * 0x09: LDY
+ * 0x0a: STX
+ * 0x0b: STY
+ * 0x0c: JMP
+ * 0x0d: JSR
+ * 0x0e: STZ
+ * 0x0f: TSB/TRB
+ *
+ * Bit 7 is set means that group is CMOS only.
+ */
+
 struct optab_ent {
 	char mnemonic[4];
-	uint16_t imp, acc, imm, zp, zpx, zpy, abs, absx, absy, ind, indx, indy, ind16, ind16x, rel;
+	uint8_t base, group;
 };
 
-#define X 0xffff
-
-static const struct optab_ent optab[] = {
-	{ "ADC",	 X,		 X,		0x69,	0x65,	0x75,	 X,		0x6D,	0x7D,	0x79,	0x172,	0x61,	0x71,	 X,		 X,		 X		},
-    { "AND",	 X,		 X,		0x29,	0x25,	0x35,	 X,		0x2D,	0x3D,	0x39,	0x132,	0x21,	0x31,	 X,		 X,		 X		},
-    { "ASL",	 X,		0x0A,	 X,		0x06,	0x16,	 X,		0x0E,	0x1E,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "BCC",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0x90	},
-    { "BCS",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0xB0	},
-    { "BEQ",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0xF0	},
-    { "BIT",	 X,		 X,		0x189,	0x24,	0x134,	 X,		0x2C,	0x13C,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "BMI",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0x30	},
-    { "BNE",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0xD0	},
-    { "BPL",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0x10	},
-    { "BRA",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0x180	},
-    { "BRK",	0x00,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "BVC",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0x50	},
-    { "BVS",	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		0x70	},
-    { "CLC",	0x18,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "CLD",	0xD8,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "CLI",	0x58,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "CLR",	 X,		 X,		 X,		0x164,	0x174,	 X,		0x19C,	0x19E,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "CLV",	0xB8,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "CMP",	 X,		 X,		0xC9,	0xC5,	0xD5,	 X,		0xCD,	0xDD,	0xD9,	0x1D2,	0xC1,	0xD1,	 X,		 X,		 X		},
-    { "CPX",	 X,		 X,		0xE0,	0xE4,	 X,		 X,		0xEC,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "CPY",	 X,		 X,		0xC0,	0xC4,	 X,		 X,		0xCC,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "DEA",	0x13A,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "DEC",	 X,		0x13A,	 X,		0xC6,	0xD6,	 X,		0xCE,	0xDE,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "DEX",	0xCA,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "DEY",	0x88,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "EOR",	 X,		 X,		0x49,	0x45,	0x55,	 X,		0x4D,	0x5D,	0x59,	0x152,	0x41,	0x51,	 X,		 X,		 X		},
-    { "INA",	0x11A,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "INC",	 X,		0x11A,	 X,		0xE6,	0xF6,	 X,		0xEE,	0xFE,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "INX",	0xE8,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "INY",	0xC8,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "JMP",	 X,		 X,		 X,		 X,		 X,		 X,		0x4C,	 X,		 X,		 X,		 X,		 X,		0x6C,	0x17C,	 X		},
-    { "JSR",	 X,		 X,		 X,		 X,		 X,		 X,		0x20,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "LDA",	 X,		 X,		0xA9,	0xA5,	0xB5,	 X,		0xAD,	0xBD,	0xB9,	0x1B2,	0xA1,	0xB1,	 X,		 X,		 X		},
-    { "LDX",	 X,		 X,		0xA2,	0xA6,	 X,		0xB6,	0xAE,	 X,		0xBE,	 X,		 X,		 X,		 X,		 X,		 X		},
-    { "LDY",	 X,		 X,		0xA0,	0xA4,	0xB4,	 X,		0xAC,	0xBC,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "LSR",	 X,		0x4A,	 X,		0x46,	0x56,	 X,		0x4E,	0x5E,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "NOP",	0xEA,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "ORA",	 X,		 X,		0x09,	0x05,	0x15,	 X,		0x0D,	0x1D,	0x19,	0x112,	0x01,	0x11,	 X,		 X,		 X		},
-    { "PHA",	0x48,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PHP",	0x08,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PHX",	0x1DA,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PHY",	0x15A,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PLA",	0x68,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PLP",	0x28,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PLX",	0x1FA,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "PLY",	0x17A,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "ROL",	 X,		0x2A,	 X,		0x26,	0x36,	 X,		0x2E,	0x3E,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "ROR",	 X,		0x6A,	 X,		0x66,	0x76,	 X,		0x6E,	0x7E,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "RTI",	0x40,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "RTS",	0x60,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "SBC",	 X,		 X,		0xE9,	0xE5,	0xF5,	 X,		0xED,	0xFD,	0xF9,	0x1F2,	0xE1,	0xF1,	 X,		 X,		 X		},
-    { "SEC",	0x38,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "SED",	0xF8,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "SEI",	0x78,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "STA",	 X,		 X,		 X,		0x85,	0x95,	 X,		0x8D,	0x9D,	0x99,	0x192,	0x81,	0x91,	 X,		 X,		 X		},
-    { "STX",	 X,		 X,		 X,		0x86,	 X,		0x96,	0x8E,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "STY",	 X,		 X,		 X,		0x84,	0x94,	 X,		0x8C,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "STZ",	 X,		 X,		 X,		0x164,	0x174,	 X,		0x19C,	0x19E,	 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TAX",	0xAA,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TAY",	0xA8,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TRB",	 X,		 X,		 X,		0x114,	 X,		 X,		0x11C,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TSB",	 X,		 X,		 X,		0x104,	 X,		 X,		0x10C,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TSX",	0xBA,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TXA",	0x8A,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TXS",	0x9A,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		},
-    { "TYA",	0x98,	 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X,		 X		}
+static const struct optab_ent m6502_optab[] = {
+	{ "ADC", 0x60, 0x02 },
+	{ "AND", 0x20, 0x02 },
+	{ "ASL", 0x00, 0x04 },
+	{ "BCC", 0x90, 0x01 },
+	{ "BCS", 0xb0, 0x01 },
+	{ "BEQ", 0xf0, 0x01 },
+	{ "BIT", 0x20, 0x06 },
+	{ "BMI", 0x30, 0x01 },
+	{ "BNE", 0xd0, 0x01 },
+	{ "BPL", 0x10, 0x01 },
+	{ "BRA", 0x80, 0x81 },
+	{ "BRK", 0x00, 0x00 },
+	{ "BVC", 0x50, 0x01 },
+	{ "BVS", 0x70, 0x01 },
+	{ "CLC", 0x18, 0x00 },
+	{ "CLD", 0xd8, 0x00 },
+	{ "CLI", 0x58, 0x00 },
+	{ "CLR", 0x60, 0x8e },
+	{ "CLV", 0xb8, 0x00 },
+	{ "CMP", 0xc0, 0x02 },
+	{ "CPX", 0xe0, 0x07 },
+	{ "CPY", 0xc0, 0x07 },
+	{ "DEA", 0x3a, 0x80 },
+	{ "DEC", 0xc0, 0x05 },
+	{ "DEX", 0xca, 0x00 },
+	{ "DEY", 0x88, 0x00 },
+	{ "EOR", 0x40, 0x02 },
+	{ "INA", 0x1a, 0x80 },
+	{ "INC", 0xe0, 0x05 },
+	{ "INX", 0xe8, 0x00 },
+	{ "INY", 0xc8, 0x00 },
+	{ "JMP", 0x40, 0x0c },
+	{ "JSR", 0x20, 0x0d },
+	{ "LDA", 0xa0, 0x02 },
+	{ "LDX", 0xa0, 0x08 },
+	{ "LDY", 0xa0, 0x09 },
+	{ "LSR", 0x40, 0x04 },
+	{ "NOP", 0xea, 0x00 },
+	{ "ORA", 0x00, 0x02 },
+	{ "PHA", 0x48, 0x00 },
+	{ "PHP", 0x08, 0x00 },
+	{ "PHX", 0xda, 0x80 },
+	{ "PHY", 0x5a, 0x80 },
+	{ "PLA", 0x68, 0x00 },
+	{ "PLP", 0x28, 0x00 },
+	{ "PLX", 0xfa, 0x80 },
+	{ "PLY", 0x7a, 0x80 },
+	{ "ROL", 0x20, 0x04 },
+	{ "ROR", 0x60, 0x04 },
+	{ "RTI", 0x40, 0x00 },
+	{ "RTS", 0x60, 0x00 },
+	{ "SBC", 0xe0, 0x02 },
+	{ "SEC", 0x38, 0x00 },
+	{ "SED", 0xf8, 0x00 },
+	{ "SEI", 0x78, 0x00 },
+	{ "STA", 0x80, 0x03 },
+	{ "STX", 0x80, 0x0a },
+	{ "STY", 0x80, 0x0b },
+	{ "STZ", 0x60, 0x8e },
+	{ "TAX", 0xaa, 0x00 },
+	{ "TAY", 0xa8, 0x00 },
+	{ "TRB", 0x10, 0x8f },
+	{ "TSB", 0x00, 0x8f },
+	{ "TSX", 0xba, 0x00 },
+	{ "TXA", 0x8a, 0x00 },
+	{ "TXS", 0x9a, 0x00 },
+	{ "TYA", 0x98, 0x00 }
 };
 
-#undef X
+/*
+ * Addressing mode tables.
+ *
+ * Not all addressing modes are represented in these tables but where
+ * many groups of instructions all support the same addressing mode the
+ * table here gives a value to be added to the 'base' value from the
+ * opcode table above to get the final opcode value.  The value 0xff
+ * means this mode is not available on that instruction group and
+ * bit 7 set means that combination is CMOS-only.
+ */
 
-static void m6502_implied(struct inctx *inp, const struct optab_ent *ptr)
+/*                                    IMP   REL   ALU   STA   shift I/D   BIT   CPX/Y LDX   LDY   STX   STY   JMP   JSR   STZ   TSB */
+static const uint8_t m6502_imm[]  = { 0xff, 0xff, 0x09, 0xff, 0xff, 0xff, 0x69, 0x00, 0x02, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+static const uint8_t m6502_zp[]   = { 0xff, 0xff, 0x05, 0x05, 0x06, 0x06, 0x04, 0x04, 0x06, 0x04, 0x06, 0x04, 0xff, 0xff, 0x04, 0x04 };
+static const uint8_t m6502_zpx[]  = { 0xff, 0xff, 0x15, 0x15, 0x16, 0x16, 0x94, 0xff, 0xff, 0x14, 0xff, 0x14, 0xff, 0xff, 0x14, 0xff };
+static const uint8_t m6502_zpy[]  = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x16, 0xff, 0x16, 0xff, 0xff, 0xff, 0xff, 0xff };
+static const uint8_t m6502_abs[]  = { 0xff, 0xff, 0x0d, 0x0d, 0x0e, 0x0e, 0x0c, 0x0c, 0x0e, 0x0c, 0x0e, 0x0c, 0x0c, 0x00, 0x3c, 0x0c };
+static const uint8_t m6502_absx[] = { 0xff, 0xff, 0x1d, 0x1d, 0x1e, 0x1e, 0x9c, 0xff, 0xff, 0x1c, 0xff, 0xff, 0xff, 0xff, 0x3e, 0xff };
+static const uint8_t m6502_absy[] = { 0xff, 0xff, 0x19, 0x19, 0xff, 0xff, 0xff, 0xff, 0x1e, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+
+static const char cmos_only_in[] = "%s is a CMOS-only instruction";
+static const char cmos_only_am[] = "%s addressing on %s is CMOS-only";
+static const char invalid_am[]   = "%s addressing is not valid for %s";
+static const char rel_range[]    = "%s branch of %d bytes is out of range by %d bytes";
+
+static void m6502_one_byte(unsigned code)
 {
-	uint16_t code = ptr->imp;
-	if (code == 0xffff)
-		code = ptr->acc;
-	if (code == 0xffff)
-		asm_error(inp, "Operation %s needs an operand", ptr->mnemonic);
-	else if (code & 0x100 && no_cmos)
-		asm_error(inp, "%s is a CMOS-only instruction", ptr->mnemonic);
-	else {
-		objcode.str[0] = code;
-		objcode.used = 1;
-	}
+	objcode.str[0] = code;
+	objcode.used = 1;
 }
 
-static void m6502_accumulator(struct inctx *inp, const struct optab_ent *ptr)
+static void m6502_two_byte(unsigned code, unsigned value)
 {
-	uint16_t code = ptr->acc;
-	if (code == 0xffff)
-		asm_error(inp, "accumulator addressings is not valid for %s", ptr->mnemonic);
-	else if (code & 0x100 && no_cmos)
-		asm_error(inp, "%s is a CMOS-only instruction", ptr->mnemonic);
-	else {
-		objcode.str[0] = code;
-		objcode.used = 1;
-	}
-}
-	
-static void m6502_two_byte(struct inctx *inp, uint16_t code, uint16_t value)
-{
-	if (code == 0xffff)
-		asm_error(inp, "Invalid addressing mode for instruction");
-	else if (code & 0x100 && no_cmos)
-		asm_error(inp, "This is CMOS-only");
-	else {
-		objcode.str[0] = code;
-		objcode.str[1] = value;
-		objcode.used = 2;
-	}
+	objcode.str[0] = code;
+	objcode.str[1] = value;
+	objcode.used = 2;
 }
 
-static void m6502_three_byte(struct inctx *inp, uint16_t code, uint16_t value)
+static void m6502_three_byte(unsigned code, unsigned value)
 {
-	if (code == 0xffff)
-		asm_error(inp, "Invalid addressing mode for instruction");
-	else if (code & 0x100 && no_cmos)
-		asm_error(inp, "This is CMOS-only");
-	else {
-		objcode.str[0] = code;
-		objcode.str[1] = value;
-		objcode.str[2] = value >> 8;
-		objcode.used = 3;
-	}
+	objcode.str[0] = code;
+	objcode.str[1] = value;
+	objcode.str[2] = value >> 8;
+	objcode.used = 3;
 }
 
-static void m6502_auto_pick(struct inctx *inp, uint16_t code8, uint16_t code16, uint16_t value)
+static void m6502_implied(struct inctx *inp, const struct optab_ent *opc)
 {
-	if (code8 != 0xffff && value < 0x100 && !(code8 & 0x100 && no_cmos)) {
-		objcode.str[0] = code8;
-		objcode.str[1] = value;
-		objcode.used = 2;
+	unsigned group = opc->group & 0x7f;
+	if (group == 0)
+		m6502_one_byte(opc->base);
+	else if (group == 0x04)
+		m6502_one_byte(opc->base + 0x0a);
+	else
+		asm_error(inp, "%s needs an operand", opc->mnemonic);
+}
+
+static void m6502_accumulator(struct inctx *inp, const struct optab_ent *opc)
+{
+	unsigned group = opc->group;
+	if (group == 0x04)
+		m6502_one_byte(opc->base + 0x0a);
+	else if (group == 0x05) {
+		if (no_cmos)
+			asm_error(inp, "%s A is a CMOS-only instruction", opc->mnemonic);
+		else
+			m6502_one_byte(0xe0 - opc->base + 0x1a);
 	}
 	else
-		m6502_three_byte(inp, code16, value);
+		asm_error(inp, invalid_am, "accumulator", opc->mnemonic);
 }
 
-static void m6502_indirect(struct inctx *inp, const struct optab_ent *ptr)
+static void m6502_immediate(struct inctx *inp, const struct optab_ent *opc)
+{
+	unsigned delta = m6502_imm[opc->group & 0x7f];
+	if (delta != 0xff) {
+		++inp->lineptr;
+		m6502_two_byte(opc->base + delta, expression(inp, false));
+	}
+	else
+		asm_error(inp, invalid_am, "immediate", opc->mnemonic);
+}
+
+static void m6502_auto_pick(struct inctx *inp, const struct optab_ent *opc, const uint8_t *grp8, const uint8_t *grp16, unsigned value, const char *mode)
+{
+	unsigned group = opc->group & 0x7f;
+	unsigned delta = grp8[group];
+	if (delta != 0xff && value < 0x100)
+		m6502_two_byte(opc->base + (delta & 0x7f), value);
+	else {
+		delta = grp16[group];
+		if (delta == 0xff)
+			asm_error(inp, invalid_am, mode, opc->mnemonic);
+		else if ((delta & 0x80) && no_cmos)
+			asm_error(inp, cmos_only_am, mode, opc->mnemonic);
+		else
+			m6502_three_byte(opc->base + (delta & 0x7f), value);
+	}
+}
+
+static void m6502_indirect(struct inctx *inp, const struct optab_ent *opc)
 {
 	++inp->lineptr;
 	uint16_t value = expression(inp, passno);
@@ -157,8 +218,19 @@ static void m6502_indirect(struct inctx *inp, const struct optab_ent *ptr)
 		ch = non_space(inp);
 		if (ch == 'X' || ch == 'x') {
 			++inp->lineptr;
-			if (non_space(inp) == ')')
-				m6502_two_byte(inp, ptr->indx, value);
+			if (non_space(inp) == ')') {
+				unsigned group = opc->group & 0x7f;
+				if (group == 0x02 || group == 0x03)
+					m6502_two_byte(opc->base + 0x01, value);
+				else if (group == 0x0c) {
+					if (no_cmos)
+						asm_error(inp, cmos_only_am, "indexed indirect", opc->mnemonic);
+					else
+						m6502_three_byte(0x7c, value);
+				}
+				else
+					asm_error(inp, invalid_am, "indexed indirect", opc->mnemonic);
+			}
 			else
 				asm_error(inp, "missing closing bracket ')'");
 		}
@@ -171,19 +243,35 @@ static void m6502_indirect(struct inctx *inp, const struct optab_ent *ptr)
 		if (non_space(inp) == ',') {
 			++inp->lineptr;
 			ch = non_space(inp);
-			if (ch == 'Y' || ch == 'y')
-				m6502_two_byte(inp, ptr->indy, value);
+			if (ch == 'Y' || ch == 'y') {
+				unsigned group = opc->group & 0x7f;
+				if (group == 0x02 || group == 0x03)
+					m6502_two_byte(opc->base + 0x11, value);
+				else
+					asm_error(inp, invalid_am, "indirect indexed", opc->mnemonic);
+			}
 			else
 				asm_error(inp, "only Y is used for indirect indexed addressing mode");
 		}
-		else
-			m6502_auto_pick(inp, ptr->ind, ptr->ind16, value);
+		else {
+			unsigned group = opc->group & 0x7f;
+			if (group == 0x02 || group == 0x03) {
+				if (no_cmos)
+					asm_error(inp, "(non-indexed) indrect addressing mode is CMOS-only");
+				else
+					m6502_two_byte(opc->base + 0x12, value);
+			}
+			else if (group == 0x0c)
+				m6502_three_byte(opc->base + 0x2c, value);
+			else
+				asm_error(inp, invalid_am, "(non-indexed) indrect", opc->mnemonic);
+		}
 	}
 	else
 		asm_error(inp, "syntax error");
 }
 
-static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
+static void m6502_others(struct inctx *inp, const struct optab_ent *opc)
 {
 	uint16_t value = expression(inp, passno);
 	int ch = *inp->lineptr;
@@ -192,26 +280,23 @@ static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 		++inp->lineptr;
 		ch = non_space(inp);
 		if (ch == 'X' || ch == 'x')
-			m6502_auto_pick(inp, ptr->zpx, ptr->absx, value);
+			m6502_auto_pick(inp, opc, m6502_zpx, m6502_absx, value, "indexed X");
 		else if (ch == 'Y' || ch == 'y')
-			m6502_auto_pick(inp, ptr->zpy, ptr->absy, value);
+			m6502_auto_pick(inp, opc, m6502_zpy, m6502_absy, value, "indexed Y");
  		else
 			asm_error(inp, "invalid register for indexed addressing");
 	}
 	else {
-		uint16_t code = ptr->rel;
-		if (code != 0xffff && !(code & 0x100 && no_cmos)) {
+		if ((opc->group & 0x7f) == 0x01) {
 			int offs = (int)value - (int)(org + 2);
 			if (offs < -128)
-				asm_error(inp, "backward branch of %d bytes is out of range by %d bytes", -offs, -offs - 128);
+				asm_error(inp, rel_range, "backward", -offs, -offs - 128);
 			else if (offs > 127)
-				asm_error(inp, "forward branch of %d bytes is out of range by %d bytes", offs, offs - 127);
-			objcode.str[0] = code;
-			objcode.str[1] = offs;
-			objcode.used = 2;
+				asm_error(inp, rel_range, "forward", offs, offs - 127);
+			m6502_two_byte(opc->base, offs);
 		}
 		else
-			m6502_auto_pick(inp, ptr->zp, ptr->abs, value);
+			m6502_auto_pick(inp, opc, m6502_zp, m6502_abs, value, "absolute");
 	}
 }
 
@@ -219,31 +304,33 @@ static void m6502_others(struct inctx *inp, const struct optab_ent *ptr)
 
 bool m6502_op(struct inctx *inp, const char *opname)
 {
-	const struct optab_ent *ptr = optab;
-	const struct optab_ent *end = optab + sizeof(optab) / sizeof(struct optab_ent);
-	while (ptr < end) {
-		if (!memcmp(opname, ptr->mnemonic, 3)) {
-			int ch = non_space(inp);
-			if (asm_isendchar(ch))
-				m6502_implied(inp, ptr);
-			else if (ch == '#') {
-				++inp->lineptr;
-				m6502_two_byte(inp, ptr->imm, expression(inp, passno));
-			}
-			else if (ch == '(')
-				m6502_indirect(inp, ptr);
-			else if (ch == 'A' || ch == 'a') {
-				ch = inp->lineptr[1];
-				if (asm_isspace(ch) || asm_isendchar(ch))
-					m6502_accumulator(inp, ptr);
+	const struct optab_ent *opc = m6502_optab;
+	const struct optab_ent *end = m6502_optab + sizeof(m6502_optab) / sizeof(struct optab_ent);
+	while (opc < end) {
+		if (!memcmp(opname, opc->mnemonic, 3)) {
+			if ((opc->group & 0x80) && no_cmos)
+				asm_error(inp, cmos_only_in, opc->mnemonic);
+			else {
+				int ch = non_space(inp);
+				if (asm_isendchar(ch))
+					m6502_implied(inp, opc);
+				else if (ch == '#')
+					m6502_immediate(inp, opc);
+				else if (ch == '(')
+					m6502_indirect(inp, opc);
+				else if (ch == 'A' || ch == 'a') {
+					ch = inp->lineptr[1];
+					if (asm_isspace(ch) || asm_isendchar(ch))
+						m6502_accumulator(inp, opc);
+					else
+						m6502_others(inp, opc);
+				}
 				else
-					m6502_others(inp, ptr);
+					m6502_others(inp, opc);
 			}
-			else
-				m6502_others(inp, ptr);
 			return true;
 		}
-		++ptr;
+		++opc;
 	}
 	return false;
 }

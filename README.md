@@ -43,7 +43,8 @@ micro.
 There are two native assemblers for the BBC micro: ADE (later ADE+)
 by System Software and the 65C02 Macro Assembler written by
 Alan Philips of Lancaster University which implement both the standard
-6502 operation syntax and a common subset of useful assembler directives.
+6502 operation syntax and a common subset of useful assembler
+directives.
 
 This cross assembler implements that common subset along with some of
 the extra directives implemented by each of those assemblers.
@@ -56,7 +57,7 @@ the extra directives implemented by each of those assemblers.
 
 This causes LAXASM to consider only the first six characters of a
 symbol as significant.  This is for compatibility with the original
-(non plus) version of ADE.
+(non-plus) version of ADE.
 
 `-d`
 
@@ -66,26 +67,26 @@ in this format may also be imported into the b-em debugger.
 
 `-l <filename>`
 
-Enable the generation of an assembly listing and specify the name of
-the file to which it should be written.
+Enables the generation of an assembly listing and specifies the name
+of the file to which it should be written.
 
 `-o <filename>`
 
-Specify the name of an object file.  If this option is not given then
+Specifies the name of an object file.  If this option is not given then
 no object file is created.
 
 `-p <lines>`
 
-Set the length of the page used in the listing.
+Sets the length of the page used in the listing.
 
 `-r`
 
-Restrict the set of 6502 opcodes to those on the original NMOS processor
-excluding those of the 65C02.
+Restricts the set of 6502 opcodes to those on the original NMOS
+processor excluding those of the 65C02.
 
 `-w <columns`
 
-Specify the width of the listing in columns.  This does not cause the
+Specifies the width of the listing in columns.  This does not cause the
 listing to be truncated but does set the position of items
 right-justified in the header and the width of the symbol table
 listing at the end.
@@ -97,7 +98,7 @@ in the listing.
 
 `-A`
 
-List all code bytes generated except the CODE directive which includes
+List all code bytes generated except the CODE directive, which includes
 a binary file verbatim in the object file.  If this option if not
 specified only up to three bytes of output code are listed for each
 input line which is sufficient for all 6502 instructions but does not
@@ -164,8 +165,8 @@ loop    LDA  message,Y
 ### Labels
 
 Labels are recognised by not being preceded by white space, i.e. by
-beginning at the start of the line.  A label may begin with either a
-letter, for a global label or macro name, or a ':' for a local label.
+beginning at the very start of the line.  A label may begin with either
+a letter, for a global label or macro name, or a ':' for a local label.
 After the initial character further characters may be letters, numbers
 and the characters '.' (dot), '$' (dollar) and _ (underscore).  The
 label may optionally be terminated by a colon and is separated from
@@ -179,8 +180,9 @@ line.
 
 ### Expressions
 
-Expressions may contain literal numbers, built-in symbols, user symbols
-(labels or values set with EQU) operators and brackets.
+Expressions are used in the operand field.  They may contain literal
+numbers, built-in symbols, user symbols (labels or values set with EQU)
+operators and brackets.
 
 The built-in symbols are:
 ```
@@ -249,23 +251,23 @@ local label scope, i.e before the _BLOCK_ takes effect.
 
 Begin a dummy (data) section.  This enables areas of memory to be laid
 out with data placement/reservation instructions without generating
-any output.  A separate location counter is kept for dummy sections
+any output.  Separate location counters are kept for dummy sections
 and the main body of the file so when DSECT is encountered for the
 first time it will start working from location zero until this is
 reset with an ORG directive.  Second and subseqent DSECTs will continue
-from where the previous DSECT finishedm though this may still be reset
+from where the previous DSECT finished, though this may still be reset
 by ORG.  DSECTs do not nest.
 
 `DEND`
 
 Finish a dummy (data) section.  This remembers the location counter
-from the DSECT, so it may be restored when another DSECT is encountered,
-and returns location counter usage to that of the main body of the
-assembly.
+at the end of the DSECT, so it may be restored when another DSECT is
+encountered, and returns location counter usage to that of the main
+body of the assembly.
 
 `DS <expr>`
 
-Define space.  This advances the location pointer by the value of the
+Define space.  This advances the location counter by the value of the
 expression.  If used outside a DSECT, the space is padded with zero
 bytes.
 
@@ -307,15 +309,20 @@ cause an error to be generated.
 
 Plant string data as specified in the string.  The string may be
 delimited by either single or double quotes.  If one style of quote
-is needed in the string then delimit the string with the other one.
-In the string there are two characters with special meaning:
+is needed in the string then the other should be used to delimit the
+string.  In the string there are two characters with special meaning:
 
 A bar (|) symbol causes the following character to have all but its
 least significant five bits masked off.  This causes the letter
-characters to turn into their equivalent control characters, this a
-CR can be included with |M, a linefeed with |J and a BEL as |G.
+characters to turn into their equivalent control characters, thus a
+CR can be included with |M, a linefeed with |J and a BEL with |G.
 
 A caret (^) symbol causes the following character to have bit 7 set.
+
+Note that LaXasm is 8-bit clean so if you were to include characters
+in the string that already had bit 7 set this would be transferred to
+the generated code but this is not portable to either of the native
+assemblers which assume only 7-bit ASCII.
 
 To include either of these characters literally in the string it should
 be doubled, i.e. || and ^^ respectively.
@@ -347,9 +354,12 @@ Include the contents of the specified file in the assembly.  When the
 end of this file is reached return to the file previously being
 assembled.  While a file is being included this is indicated in the
 listing with an 'I'.  Note that if this is invoked from a MACRO,
-assembly immediately switched to the included files and expansion of
+assembly immediately switches to the included file and expansion of
 the MACRO finishes once the included file has come to an end.
 
+With LaXasm you can nest files to any depth you like until your run
+out of either open file handles or stack space but this is not portable
+to either of the native assemblers that allow only one level of include.
 
 `CHN <filename>`
 
@@ -415,12 +425,12 @@ also the command line options -A and -C and _LISTO_ below.
 
 Control the source listing level. This will accept the words **ON**,
 **OFF** and **FULL** as in ADE+ or an expression that evaluates to a
-number 0-3 as in the Lancaster assembler.  When **off** or zero, no
-lines of the source text are included in the listing, only errors.  When
-**on** or **1** lines of the source text not generated by macro
-expansion are included.  When **full** or **2** lines generated by
-expanding macros are also included.  See also the command line
-option -M and _LISTO_ below.
+number 0-3 as in the Lancaster assembler.  When **off** or zero, the
+only lines of the source text included in the listing are those with
+errors.  When **on** or **1** lines of the source text not generated
+by macro expansion are included.  When **full** or **2** lines
+generated by expanding macros are also included.  See also the command
+line option -M and _LISTO_ below.
 
 `LFCOND`
 
@@ -445,9 +455,9 @@ corresponding command line argument.
 3 &008  -T   - Symbol table suppressed
 4 &010  -M   - listing of macro expansion suppressed.
 5 &020  -A   - more than three code bytes per input line in listing.
-6 &040  -C   - bytes from codefile included in listing.
+6 &040  -C   - bytes from code file included in listing.
 7 &080  -S   - Skipped conditional lines excluded.
-8 &100       - Listing is enabled.
+8 &100  -l   - Listing is enabled.
 ```
 
 `PAGE <length>[,<width>]`
@@ -519,7 +529,7 @@ CPRMES  DFB 0
 There is no _ELSIF_.  Conditionals can be nested to a depth of 32.
 
 When the assembler is scanning for a matching _FI_ directive it needs
-to be able to parse the label field and find the opcode fields so these
+to be able to parse the label field and find the opcode field so these
 must be correct, however labels are not assigned and expressions are
 not evauluated.
 
@@ -555,7 +565,7 @@ macro invocation number by the assembler and can therefore be used to
 define labels that are unique each time the macro is expanded
 
 A macro may not be defined while defining an existing macro, i.e.
-the _MACRO_ directive does not nest but calls to macros do nest.  In
+the _MACRO_ directive does not nest, but calls to macros do nest.  In
 this case @0 is saved and restored around the nested macro call so the
 calling macro can still refer to its own symbols.
 
