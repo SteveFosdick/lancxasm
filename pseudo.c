@@ -690,6 +690,24 @@ static enum action pseudo_stop(struct inctx *inp, struct symbol *sym)
 	return ACT_STOP;
 }
 
+static enum action pseudo_end(struct inctx *inp, struct symbol *sym)
+{
+	const char *reason = NULL;
+	if (inp->whence == 'M')
+		reason = "macro expansion";
+	else if (inp->whence == 'I')
+		reason = "include file";
+	else if (inp->rpt_line)
+		reason = "REPEAT/WHILE loop";
+	if (reason) {
+		fprintf(stderr, "laxasm: END ignored during %s\n", reason);
+		return ACT_CONTINUE;
+	}
+	if (passno && non_space(inp) != '\n')
+		exec_addr = expression(inp, true);
+	return ACT_STOP;
+}
+
 static enum action pseudo_assign(struct inctx *inp, struct symbol *sym)
 {
 	/* the case with a label is handled in laxasm.c */
@@ -726,6 +744,7 @@ static const struct op_type pseudo_ops[] = {
 	{ "DW",      pseudo_dfw     },
 	{ "DFDB",    pseudo_dfdb    },
 	{ "ENDM",    pseudo_endm    },
+	{ "END",     pseudo_end     },
 	{ "EQU",     pseudo_equ     },
 	{ "EXEC",    pseudo_exec    },
 	{ "HEX",     pseudo_hex     },
