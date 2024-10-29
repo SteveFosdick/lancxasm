@@ -131,7 +131,7 @@ void list_line(struct inctx *inp)
 				else {
 					putc(' ', list_fp);
 					putc(' ', list_fp);
-					unsigned col = 1;
+					unsigned col = 0;
 					const char *ptr = inp->line.str;
 					size_t remain = inp->line.used;
 					const char *tab = memchr(ptr, '\t', remain);
