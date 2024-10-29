@@ -64,6 +64,7 @@ struct symbol {
 		uint16_t value;
 		struct macline *macro;
 	};
+	char used;
 	char name_str[1];
 };
 

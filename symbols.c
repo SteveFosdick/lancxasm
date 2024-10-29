@@ -59,6 +59,7 @@ struct symbol *symbol_enter_pass1(struct inctx *inp, size_t label_size, int scop
 	if (sym) {
 		sym->scope = scope;
 		sym->name = sym->name_str;
+		sym->used = 0;
 		symbol_uppercase(inp->line.str, label_size, sym->name_str);
 		struct symbol **res = tsearch(sym, &symbols, symbol_cmp);
 		if (!res)
@@ -110,8 +111,11 @@ struct symbol *symbol_lookup(struct inctx *inp, bool no_undef)
 	sym.scope = *lab_start == ':' ? scope_no : SCOPE_GLOBAL;
 	sym.name = label;
 	void *node = tfind(&sym, &symbols, symbol_cmp);
-	if (node)
-		return *(struct symbol **)node;
+	if (node) {
+		struct symbol *sym = *(struct symbol **)node;
+		sym->used = 1;
+		return sym;
+	}
 	if (no_undef)
 		asm_error(inp, "symbol %s not found", label);
 	return NULL;
@@ -121,18 +125,30 @@ static void print_one(const void *nodep, VISIT which, int depth)
 {
 	if (which == leaf || which == postorder) {
 		const struct symbol *sym = *(const struct symbol **)nodep;
-		if (++sym_col == sym_cols) {
-			if (sym->scope == SCOPE_MACRO)
-				fprintf(list_fp, "%-*s MACRO\n", sym_max, sym->name);
-			else
-				fprintf(list_fp, "%-*s &%04X\n", sym_max, sym->name, sym->value);
-			sym_col = 0;
+		if (sym->scope == SCOPE_MACRO) {
+			const char *fmt = "%-*s MACRO   ";
+			if (++sym_col == sym_cols) {
+				fmt = "%-*s  MACRO\n";
+				sym_col = 0;
+			}
+			fprintf(list_fp, fmt, sym_max, sym->name);
 		}
 		else {
-			if (sym->scope == SCOPE_MACRO)
-				fprintf(list_fp, "%-*s MACRO  ", sym_max, sym->name);
-			else
-				fprintf(list_fp, "%-*s &%04X  ", sym_max, sym->name, sym->value);
+			const char *fmt;
+			if (++sym_col == sym_cols) {
+				if (sym->used)
+					fmt = "%-*s &%04X\n";
+				else
+					fmt = "%-*s &%04X-\n";
+				sym_col = 0;
+			}
+			else {
+				if (sym->used)
+					fmt = "%-*s &%04X  ";
+				else
+					fmt = "%-*s &%04X- ";
+			}
+			fprintf(list_fp, fmt, sym_max, sym->name, sym->value);
 		}
 	}
 }
@@ -144,7 +160,7 @@ void symbol_print(void)
 		fputs("\nNo symbols defined\n", list_fp);
 	else {
 		fprintf(list_fp, "\n%d symbols defined\n\n", sym_count);
-		sym_cols = page_width / (sym_max + 8);
+		sym_cols = page_width / (sym_max + 9);
 		sym_col = 0;
 		twalk(symbols, print_one);
 		if (sym_col)
